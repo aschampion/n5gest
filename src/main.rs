@@ -534,19 +534,10 @@ fn validate_block<T, N5>(
         data_attrs,
         coord.to_vec());
 
-    let expected_numel : i32 = data_attrs.get_block_size().to_vec().iter().product();
-
     match block_opt {
-        Ok(o) => match o {
-            Some(b) =>
-                if b.get_num_elements() == expected_numel {
-                    Ok(None)
-                } else {
-                    Ok(Some(coord))
-                },
-            None => Ok(None),
-        },
+        // todo: incorrect block size only raises for uint8
+        Ok(_o) => Ok(None),
         // todo: different handling for different types of error
-        Err(_e) => Ok(Some(coord))
+        Err(_e) => Ok(Some(coord)),
     }
 }
