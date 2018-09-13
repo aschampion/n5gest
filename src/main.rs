@@ -4,7 +4,6 @@ extern crate indicatif;
 extern crate itertools;
 extern crate n5;
 extern crate serde_json;
-#[macro_use]
 extern crate structopt;
 
 
