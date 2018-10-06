@@ -125,7 +125,7 @@ fn bench_read<N5>(
     pool_size: Option<usize>,
 ) -> Result<usize>
     where
-        N5: N5Writer + Sync + Send + Clone + 'static, {
+        N5: N5Reader + Sync + Send + Clone + 'static, {
 
     let data_attrs = n.get_dataset_attributes(dataset)?;
 
