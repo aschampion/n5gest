@@ -37,7 +37,6 @@ use num_traits::{
 };
 use prettytable::Table;
 use structopt::StructOpt;
-use std::path::Path;
 
 /// Utilities for N5 files.
 #[derive(StructOpt, Debug)]
@@ -242,15 +241,7 @@ fn main() {
                 &dataset,
                 opt.threads).unwrap();
             for block_idx in invalid_blocks.iter() {
-                // todo: would prefer to use get_data_block_path, but it's private
-                // println!("{}", n.get_data_block_path(&dataset, &block_idx)?.display());
-
-                // todo: handle edge cases like get_data_block_path?
-                let mut block_path = Path::new(&n5_path).join(&dataset);
-                for val in block_idx.iter() {
-                    block_path.push(val.to_string());
-                }
-                println!("{}", block_path.display());
+                println!("{}", n.get_block_uri(&dataset, block_idx).unwrap());
             }
             eprintln!("Found {} invalid block(s) in {}",
                 invalid_blocks.len(), HumanDuration(started.elapsed()));
@@ -466,16 +457,10 @@ fn get_invalid_blocks<N5>(
         None => CpuPool::new_num_cpus(),
     };
 
-    let coord_ceil = data_attrs.get_dimensions().iter()
-        .zip(data_attrs.get_block_size().iter())
-        .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
-        .collect::<Vec<_>>();
-    let total_coords: i64 = coord_ceil.iter().product();
-    let coord_iter = coord_ceil.into_iter()
-        .map(|c| 0..c)
-        .multi_cartesian_product();
-
+    let coord_iter = data_attrs.coord_iter();
+    let total_coords = coord_iter.len();
     let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
+    bar.write().unwrap().set_draw_target(ProgressDrawTarget::stderr());
 
     for coord in coord_iter {
         let n_c = n.clone();
