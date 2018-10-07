@@ -4,6 +4,9 @@ extern crate indicatif;
 extern crate itertools;
 extern crate n5;
 #[macro_use]
+extern crate num_derive;
+extern crate num_traits;
+#[macro_use]
 extern crate prettytable;
 extern crate serde_json;
 extern crate structopt;
@@ -29,6 +32,10 @@ use indicatif::{
 use itertools::Itertools;
 use n5::prelude::*;
 use n5::DataBlockCreator;
+use num_traits::{
+    FromPrimitive,
+    ToPrimitive,
+};
 use prettytable::Table;
 use structopt::StructOpt;
 
@@ -88,6 +95,49 @@ struct RecompressOptions {
     output_dataset: String,
 }
 
+#[derive(FromPrimitive, ToPrimitive)]
+enum MetricPrefix {
+    None = 0,
+    Kilo,
+    Mega,
+    Giga,
+    Tera,
+    Peta,
+    Exa,
+    Zetta,
+    Yotta,
+}
+
+impl MetricPrefix {
+    fn reduce(mut number: usize) -> (usize, MetricPrefix) {
+        let mut order = MetricPrefix::None.to_usize().unwrap();
+        let max_order = MetricPrefix::Yotta.to_usize().unwrap();
+
+        while number > 10_000 && order <= max_order {
+            number /= 1_000;
+            order += 1;
+        }
+
+        (number, MetricPrefix::from_usize(order).unwrap())
+    }
+}
+
+impl std::fmt::Display for MetricPrefix {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            MetricPrefix::None => " ",
+            MetricPrefix::Kilo => "K",
+            MetricPrefix::Mega => "M",
+            MetricPrefix::Giga => "G",
+            MetricPrefix::Tera => "T",
+            MetricPrefix::Peta => "P",
+            MetricPrefix::Exa => "E",
+            MetricPrefix::Zetta => "Z",
+            MetricPrefix::Yotta => "Y",
+        })
+    }
+}
+
 fn main() {
     let opt = Options::from_args();
 
@@ -120,15 +170,19 @@ fn main() {
             table.set_titles(row![
                 "Path",
                 r -> "Dims",
+                r -> "Max vox",
                 r -> "Block",
                 "Dtype",
                 "Compression",
             ]);
 
             for (path, attr) in datasets {
+                let numel = attr.get_dimensions().iter().map(|&n| n as usize).product();
+                let (numel, prefix) = MetricPrefix::reduce(numel);
                 table.add_row(row![
                     b -> path,
                     r -> format!("{:?}", attr.get_dimensions()),
+                    r -> format!("{} {}", numel, prefix),
                     r -> format!("{:?}", attr.get_block_size()),
                     format!("{:?}", attr.get_data_type()),
                     attr.get_compression(),
