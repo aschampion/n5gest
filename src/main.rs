@@ -27,6 +27,7 @@ use indicatif::{
     HumanBytes,
     HumanDuration,
     ProgressBar,
+    ProgressDrawTarget,
 };
 use n5::prelude::*;
 use n5::DataBlockCreator;
@@ -246,6 +247,7 @@ fn bench_read<N5>(
     let coord_iter = data_attrs.coord_iter();
     let total_coords = coord_iter.size_hint().0;
     let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
+    bar.write().unwrap().set_draw_target(ProgressDrawTarget::stderr());
 
     for coord in coord_iter {
 
@@ -340,6 +342,7 @@ fn recompress<N5I, N5O>(
     let coord_iter = data_attrs_in.coord_iter();
     let total_coords = coord_iter.size_hint().0;
     let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
+    bar.write().unwrap().set_draw_target(ProgressDrawTarget::stderr());
 
     for coord in coord_iter {
 
