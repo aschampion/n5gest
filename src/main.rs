@@ -8,6 +8,8 @@ extern crate num_traits;
 #[macro_use]
 extern crate prettytable;
 extern crate serde_json;
+// This `macro_use` is linted in beta and nightly, but is necessary for stable.
+#[macro_use]
 extern crate structopt;
 
 
