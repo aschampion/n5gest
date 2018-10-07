@@ -1,7 +1,6 @@
 extern crate futures;
 extern crate futures_cpupool;
 extern crate indicatif;
-extern crate itertools;
 extern crate n5;
 #[macro_use]
 extern crate num_derive;
@@ -29,7 +28,6 @@ use indicatif::{
     HumanDuration,
     ProgressBar,
 };
-use itertools::Itertools;
 use n5::prelude::*;
 use n5::DataBlockCreator;
 use num_traits::{
@@ -245,14 +243,8 @@ fn bench_read<N5>(
         None => CpuPool::new_num_cpus(),
     };
 
-    let coord_ceil = data_attrs.get_dimensions().iter()
-        .zip(data_attrs.get_block_size().iter())
-        .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
-        .collect::<Vec<_>>();
-    let total_coords: i64 = coord_ceil.iter().product();
-    let coord_iter = coord_ceil.into_iter()
-        .map(|c| 0..c)
-        .multi_cartesian_product();
+    let coord_iter = data_attrs.coord_iter();
+    let total_coords = coord_iter.size_hint().0;
     let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
 
     for coord in coord_iter {
@@ -300,7 +292,7 @@ fn bench_read_block<T, N5>(
     where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
         N5: N5Reader + Sync + Send + Clone + 'static,
         DataType: TypeReflection<T> + DataBlockCreator<T>,
-        VecDataBlock<T>: n5::ReadableDataBlock + n5::WriteableDataBlock {
+        VecDataBlock<T>: n5::DataBlock<T> {
 
     let block_in = n.read_block::<T>(
         dataset,
@@ -345,14 +337,8 @@ fn recompress<N5I, N5O>(
         None => CpuPool::new_num_cpus(),
     };
 
-    let coord_ceil = data_attrs_in.get_dimensions().iter()
-        .zip(data_attrs_in.get_block_size().iter())
-        .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
-        .collect::<Vec<_>>();
-    let total_coords: i64 = coord_ceil.iter().product();
-    let coord_iter = coord_ceil.into_iter()
-        .map(|c| 0..c)
-        .multi_cartesian_product();
+    let coord_iter = data_attrs_in.coord_iter();
+    let total_coords = coord_iter.size_hint().0;
     let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
 
     for coord in coord_iter {
@@ -410,7 +396,7 @@ fn recompress_block<T, N5I, N5O>(
         N5I: N5Reader + Sync + Send + Clone + 'static,
         N5O: N5Writer + Sync + Send + Clone + 'static,
         DataType: TypeReflection<T> + DataBlockCreator<T>,
-        VecDataBlock<T>: n5::ReadableDataBlock + n5::WriteableDataBlock {
+        VecDataBlock<T>: DataBlock<T> {
 
     let block_in = n5_in.read_block::<T>(
         dataset_in,
