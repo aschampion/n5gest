@@ -3,6 +3,8 @@ extern crate futures_cpupool;
 extern crate indicatif;
 extern crate itertools;
 extern crate n5;
+#[macro_use]
+extern crate prettytable;
 extern crate serde_json;
 extern crate structopt;
 
@@ -27,6 +29,7 @@ use indicatif::{
 use itertools::Itertools;
 use n5::prelude::*;
 use n5::DataBlockCreator;
+use prettytable::Table;
 use structopt::StructOpt;
 
 /// Utilities for N5 files.
@@ -43,6 +46,13 @@ struct Options {
 
 #[derive(StructOpt, Debug)]
 enum Command {
+    /// List all datasets under an N5 root.
+    #[structopt(name = "ls")]
+    List {
+        /// N5 root path
+        #[structopt(name = "N5")]
+        n5_path: String,
+    },
     /// Benchmark reading an entire dataset.
     #[structopt(name = "bench-read")]
     BenchRead {
@@ -82,6 +92,51 @@ fn main() {
     let opt = Options::from_args();
 
     match opt.command {
+        Command::List {n5_path} => {
+            let n = N5Filesystem::open(&n5_path).unwrap();
+            let mut group_stack = vec![("".to_owned(), n.list("").unwrap().into_iter())];
+
+            let mut datasets = vec![];
+
+            while let Some((mut g_path, mut g_iter)) = group_stack.pop() {
+                if let Some(next_item) = g_iter.next() {
+                    let path: String = if g_path.is_empty() {
+                        next_item
+                    } else {
+                        g_path.clone() + "/" + &next_item
+                    };
+                    group_stack.push((g_path, g_iter));
+                    if let Ok(ds_attr) = n.get_dataset_attributes(&path) {
+                        datasets.push((path, ds_attr));
+                    } else {
+                        let next_g_iter = n.list(&path).unwrap().into_iter();
+                        group_stack.push((path, next_g_iter));
+                    }
+                }
+            }
+
+            let mut table = Table::new();
+            table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
+            table.set_titles(row![
+                "Path",
+                r -> "Dims",
+                r -> "Block",
+                "Dtype",
+                "Compression",
+            ]);
+
+            for (path, attr) in datasets {
+                table.add_row(row![
+                    b -> path,
+                    r -> format!("{:?}", attr.get_dimensions()),
+                    r -> format!("{:?}", attr.get_block_size()),
+                    format!("{:?}", attr.get_data_type()),
+                    attr.get_compression(),
+                ]);
+            }
+
+            table.printstd();
+        },
         Command::BenchRead {n5_path, dataset} => {
             let n = N5Filesystem::open(&n5_path).unwrap();
             let started = Instant::now();
