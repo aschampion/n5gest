@@ -73,6 +73,16 @@ enum Command {
     /// compression.
     #[structopt(name = "recompress")]
     Recompress(RecompressOptions),
+    /// Report malformed blocks.
+    #[structopt(name = "validate-blocks")]
+    ValidateBlocks {
+        /// Input N5 root path
+        #[structopt(name = "N5")]
+        n5_path: String,
+        /// Input N5 dataset
+        #[structopt(name = "DATASET")]
+        dataset: String,
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -222,6 +232,19 @@ fn main() {
             println!("Converted {} (uncompressed) in {}",
                 HumanBytes(num_bytes as u64),
                 HumanDuration(started.elapsed()));
+        },
+        Command::ValidateBlocks {n5_path, dataset} => {
+            let n = N5Filesystem::open(&n5_path).unwrap();
+            let started = Instant::now();
+            let invalid_blocks = get_invalid_blocks(
+                &n,
+                &dataset,
+                opt.threads).unwrap();
+            for block_idx in invalid_blocks.iter() {
+                println!("{}", n.get_block_uri(&dataset, block_idx).unwrap());
+            }
+            eprintln!("Found {} invalid block(s) in {}",
+                invalid_blocks.len(), HumanDuration(started.elapsed()));
         },
     }
 }
@@ -414,4 +437,92 @@ fn recompress_block<T, N5I, N5O>(
     };
 
     Ok(num_vox)
+}
+
+fn get_invalid_blocks<N5>(
+    n: &N5,
+    dataset: &str,
+    pool_size: Option<usize>,
+) -> Result<Vec<Vec<i64>>>
+    where N5: N5Reader + Sync + Send + Clone + 'static {
+
+
+    // todo: copied from bench_read; refactor
+    let data_attrs = n.get_dataset_attributes(dataset)?;
+
+    let mut all_jobs: Vec<CpuFuture<Option<Vec<i64>>, std::io::Error>> =
+        Vec::new();
+    let pool = match pool_size {
+        Some(threads) => CpuPool::new(threads),
+        None => CpuPool::new_num_cpus(),
+    };
+
+    let coord_iter = data_attrs.coord_iter();
+    let total_coords = coord_iter.len();
+    let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
+    bar.write().unwrap().set_draw_target(ProgressDrawTarget::stderr());
+
+    for coord in coord_iter {
+        let n_c = n.clone();
+        let dataset_c = dataset.to_owned();
+        let data_attrs_c = data_attrs.clone();
+        let bar_c = bar.clone();
+        all_jobs.push(pool.spawn_fn(move || {
+            // TODO: Have to work around annoying reflection issue.
+            let results = match *data_attrs_c.get_data_type() {
+                DataType::UINT8 => validate_block::<u8, _>(
+                    &n_c,
+                    &dataset_c,
+                    &data_attrs_c,
+                    coord)?,
+                _ => unimplemented!(),
+                // DataType::UINT16 => std::mem::size_of::<u16>(),
+                // DataType::UINT32 => std::mem::size_of::<u32>(),
+                // DataType::UINT64 => std::mem::size_of::<u64>(),
+                // DataType::INT8 => std::mem::size_of::<i8>(),
+                // DataType::INT16 => std::mem::size_of::<i16>(),
+                // DataType::INT32 => std::mem::size_of::<i32>(),
+                // DataType::INT64 => std::mem::size_of::<i64>(),
+                // DataType::FLOAT32 => std::mem::size_of::<f32>(),
+                // DataType::FLOAT64 => std::mem::size_of::<f64>(),
+            };
+            bar_c.write().unwrap().inc(1);
+            Ok(results)
+        }));
+    }
+
+    let mut block_idxs : Vec<Vec<i64>> = Vec::new();
+
+    for result in futures::future::join_all(all_jobs).wait()?.iter() {
+        match result {
+            Some(v) => block_idxs.push(v.to_vec()),
+            None => {},
+        }
+    }
+
+    Ok(block_idxs)
+}
+
+fn validate_block<T, N5>(
+    n5: &N5,
+    dataset: &str,
+    data_attrs: &DatasetAttributes,
+    coord: Vec<i64>,
+) -> Result<Option<Vec<i64>>>
+    where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
+          N5: N5Reader + Sync + Send + Clone + 'static,
+          DataType: TypeReflection<T> + DataBlockCreator<T>,
+          VecDataBlock<T>: n5::ReadableDataBlock + n5::WriteableDataBlock {
+
+    let block_opt = n5.read_block::<T>(
+        dataset,
+        data_attrs,
+        coord.to_vec());
+
+    match block_opt {
+        // todo: incorrect block size only raises for uint8
+        Ok(_o) => Ok(None),
+        // todo: different handling for different types of error
+        Err(_e) => Ok(Some(coord)),
+    }
 }
