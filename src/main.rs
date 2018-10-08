@@ -238,15 +238,25 @@ fn main() {
         Command::ValidateBlocks {n5_path, dataset} => {
             let n = N5Filesystem::open(&n5_path).unwrap();
             let started = Instant::now();
-            let invalid_blocks = get_invalid_blocks(
+            let invalid = get_invalid_blocks(
                 &n,
                 &dataset,
                 opt.threads).unwrap();
-            for block_idx in invalid_blocks.iter() {
-                println!("{}", n.get_block_uri(&dataset, block_idx).unwrap());
+            if !invalid.errored.is_empty() {
+                eprintln!("Found {} errored block(s)", invalid.errored.len());
+                for block_idx in invalid.errored.iter() {
+                    println!("{}", n.get_block_uri(&dataset, block_idx).unwrap());
+                }
+            }
+            if !invalid.wrongly_sized.is_empty() {
+                eprintln!("Found {} wrongly sized block(s)", invalid.wrongly_sized.len());
+                for block_idx in invalid.wrongly_sized.iter() {
+                    println!("{}", n.get_block_uri(&dataset, block_idx).unwrap());
+                }
             }
             eprintln!("Found {} invalid block(s) in {}",
-                invalid_blocks.len(), HumanDuration(started.elapsed()));
+                invalid.errored.len() + invalid.wrongly_sized.len(),
+                HumanDuration(started.elapsed()));
         },
     }
 }
@@ -441,18 +451,30 @@ fn recompress_block<T, N5I, N5O>(
     Ok(num_vox)
 }
 
+struct InvalidBlocks {
+    errored: Vec<Vec<i64>>,
+    wrongly_sized: Vec<Vec<i64>>,
+}
+
+impl Default for InvalidBlocks {
+    fn default() -> Self {
+        Self {
+            errored: vec![],
+            wrongly_sized: vec![],
+        }
+    }
+}
+
 fn get_invalid_blocks<N5>(
     n: &N5,
     dataset: &str,
     pool_size: Option<usize>,
-) -> Result<Vec<Vec<i64>>>
+) -> Result<InvalidBlocks>
     where N5: N5Reader + Sync + Send + Clone + 'static {
 
-
-    // todo: copied from bench_read; refactor
     let data_attrs = n.get_dataset_attributes(dataset)?;
 
-    let mut all_jobs: Vec<CpuFuture<Option<Vec<i64>>, std::io::Error>> =
+    let mut all_jobs: Vec<CpuFuture<_, std::io::Error>> =
         Vec::new();
     let pool = match pool_size {
         Some(threads) => CpuPool::new(threads),
@@ -476,7 +498,7 @@ fn get_invalid_blocks<N5>(
                     &n_c,
                     &dataset_c,
                     &data_attrs_c,
-                    coord)?,
+                    coord),
                 _ => unimplemented!(),
                 // DataType::UINT16 => std::mem::size_of::<u16>(),
                 // DataType::UINT32 => std::mem::size_of::<u32>(),
@@ -493,16 +515,23 @@ fn get_invalid_blocks<N5>(
         }));
     }
 
-    let mut block_idxs : Vec<Vec<i64>> = Vec::new();
+    let mut invalid = InvalidBlocks::default();
 
-    for result in futures::future::join_all(all_jobs).wait()?.iter() {
+    for result in futures::future::join_all(all_jobs).wait()?.into_iter() {
         match result {
-            Some(v) => block_idxs.push(v.to_vec()),
-            None => {},
+            ValidationResult::Ok => {},
+            ValidationResult::Error(v) => invalid.errored.push(v),
+            ValidationResult::WrongSize(v) => invalid.wrongly_sized.push(v),
         }
     }
 
-    Ok(block_idxs)
+    Ok(invalid)
+}
+
+enum ValidationResult {
+    Ok,
+    Error(Vec<i64>),
+    WrongSize(Vec<i64>),
 }
 
 fn validate_block<T, N5>(
@@ -510,21 +539,33 @@ fn validate_block<T, N5>(
     dataset: &str,
     data_attrs: &DatasetAttributes,
     coord: Vec<i64>,
-) -> Result<Option<Vec<i64>>>
+) -> ValidationResult
     where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
           N5: N5Reader + Sync + Send + Clone + 'static,
           DataType: TypeReflection<T> + DataBlockCreator<T>,
-          VecDataBlock<T>: n5::ReadableDataBlock + n5::WriteableDataBlock {
+          VecDataBlock<T>: DataBlock<T> {
 
     let block_opt = n5.read_block::<T>(
         dataset,
         data_attrs,
-        coord.to_vec());
+        coord.clone());
 
     match block_opt {
-        // todo: incorrect block size only raises for uint8
-        Ok(_o) => Ok(None),
-        // todo: different handling for different types of error
-        Err(_e) => Ok(Some(coord)),
+        Ok(Some(block)) => {
+
+            let expected_size: Vec<i32> = data_attrs.get_dimensions().iter()
+                .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
+                .zip(coord.iter())
+                .map(|((&d, s), &c)| (std::cmp::min((c + 1) * s, d) - c * s) as i32)
+                .collect();
+
+            if expected_size == block.get_size() {
+                ValidationResult::Ok
+            } else {
+                ValidationResult::WrongSize(coord)
+            }
+        },
+        Ok(None) => ValidationResult::Ok,
+        Err(_) => ValidationResult::Error(coord),
     }
 }
