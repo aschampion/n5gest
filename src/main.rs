@@ -1,6 +1,7 @@
 extern crate futures;
 extern crate futures_cpupool;
 extern crate indicatif;
+extern crate itertools;
 extern crate n5;
 #[macro_use]
 extern crate num_derive;
@@ -31,6 +32,7 @@ use indicatif::{
     ProgressBar,
     ProgressDrawTarget,
 };
+use itertools::Itertools;
 use n5::prelude::*;
 use n5::DataBlockCreator;
 use num_traits::{
@@ -71,6 +73,10 @@ enum Command {
         #[structopt(name = "DATASET")]
         dataset: String,
     },
+    /// Crop wrongly sized blocks to match dataset dimensions at the end of a
+    /// given axis.
+    #[structopt(name = "crop-blocks")]
+    CropBlocks(CropBlocksOptions),
     /// Recompress an existing dataset into a new dataset with a given
     /// compression.
     #[structopt(name = "recompress")]
@@ -85,6 +91,25 @@ enum Command {
         #[structopt(name = "DATASET")]
         dataset: String,
     },
+}
+
+#[derive(StructOpt, Debug)]
+struct CropBlocksOptions {
+    /// Input N5 root path
+    #[structopt(name = "INPUT_N5")]
+    input_n5_path: String,
+    /// Input N5 dataset
+    #[structopt(name = "INPUT_DATASET")]
+    input_dataset: String,
+    /// Axis to check
+    #[structopt(name = "AXIS")]
+    axis: i32,
+    /// Output N5 root path
+    #[structopt(name = "OUTPUT_N5")]
+    output_n5_path: String,
+    /// Output N5 dataset
+    #[structopt(name = "OUPUT_DATASET")]
+    output_dataset: String,
 }
 
 #[derive(StructOpt, Debug)]
@@ -217,6 +242,24 @@ fn main() {
                 (1e9 * (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64));
             println!("({} / s)", HumanBytes(throughput as u64));
         },
+        Command::CropBlocks(ref crop_opt) => {
+            let n5_in = N5Filesystem::open_or_create(&crop_opt.input_n5_path).unwrap();
+            let n5_out = N5Filesystem::open_or_create(&crop_opt.output_n5_path).unwrap();
+            println!("Cropping along {}", crop_opt.axis);
+
+            let started = Instant::now();
+            let (num_blocks, num_bytes) = crop_blocks(
+                &n5_in,
+                &crop_opt.input_dataset,
+                &n5_out,
+                &crop_opt.output_dataset,
+                crop_opt.axis,
+                opt.threads).unwrap();
+            println!("Converted {} blocks with {} (uncompressed) in {}",
+                num_blocks,
+                HumanBytes(num_bytes as u64),
+                HumanDuration(started.elapsed()));
+        },
         Command::Recompress(ref com_opt) => {
             let n5_in = N5Filesystem::open_or_create(&com_opt.input_n5_path).unwrap();
             let n5_out = N5Filesystem::open_or_create(&com_opt.output_n5_path).unwrap();
@@ -346,6 +389,150 @@ fn bench_read_block<T, N5>(
 }
 
 
+fn crop_blocks<N5I, N5O>(
+    n5_in: &N5I,
+    dataset_in: &str,
+    n5_out: &N5O,
+    dataset_out: &str,
+    axis: i32,
+    pool_size: Option<usize>,
+) -> Result<(usize, usize)>
+    where
+        N5I: N5Reader + Sync + Send + Clone + 'static,
+        N5O: N5Writer + Sync + Send + Clone + 'static, {
+
+    let data_attrs_in = n5_in.get_dataset_attributes(dataset_in)?;
+    let data_attrs_out = data_attrs_in.clone();
+
+    n5_out.create_dataset(dataset_out, &data_attrs_out)?;
+
+    let mut all_jobs: Vec<CpuFuture<_, std::io::Error>> =
+        Vec::new();
+    let pool = match pool_size {
+        Some(threads) => CpuPool::new(threads),
+        None => CpuPool::new_num_cpus(),
+    };
+
+    let mut coord_ceil = data_attrs_in.get_dimensions().iter()
+        .zip(data_attrs_in.get_block_size().iter())
+        .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
+        .collect::<Vec<_>>();
+    let axis_ceil = coord_ceil.remove(axis as usize);
+    let total_coords: i64 = coord_ceil.iter().product();
+    let coord_iter = coord_ceil.into_iter()
+        .map(|c| 0..c)
+        .multi_cartesian_product();
+
+
+    let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
+    bar.write().unwrap().set_draw_target(ProgressDrawTarget::stderr());
+
+    for mut coord in coord_iter {
+
+        let n5_in_c = n5_in.clone();
+        let n5_out_c = n5_out.clone();
+        let dataset_in_c = dataset_in.to_owned();
+        let dataset_out_c = dataset_out.to_owned();
+        let data_attrs_in_c = data_attrs_in.clone();
+        let data_attrs_out_c = data_attrs_out.clone();
+        let bar_c = bar.clone();
+        coord.insert(axis as usize, axis_ceil - 1);
+        all_jobs.push(pool.spawn_fn(move || {
+            // TODO: Have to work around annoying reflection issue.
+            let counts = match *data_attrs_in_c.get_data_type() {
+                DataType::UINT8 => crop_block::<u8, _, _>(
+                    &n5_in_c,
+                    &dataset_in_c,
+                    &n5_out_c,
+                    &dataset_out_c,
+                    &data_attrs_in_c,
+                    &data_attrs_out_c,
+                    coord)?,
+                _ => unimplemented!(),
+                // DataType::UINT16 => std::mem::size_of::<u16>(),
+                // DataType::UINT32 => std::mem::size_of::<u32>(),
+                // DataType::UINT64 => std::mem::size_of::<u64>(),
+                // DataType::INT8 => std::mem::size_of::<i8>(),
+                // DataType::INT16 => std::mem::size_of::<i16>(),
+                // DataType::INT32 => std::mem::size_of::<i32>(),
+                // DataType::INT64 => std::mem::size_of::<i64>(),
+                // DataType::FLOAT32 => std::mem::size_of::<f32>(),
+                // DataType::FLOAT64 => std::mem::size_of::<f64>(),
+            };
+            bar_c.write().unwrap().inc(1);
+            Ok(counts)
+        }));
+    }
+
+    let (num_blocks, num_vox): (usize, usize) = futures::future::join_all(all_jobs).wait()?.iter()
+        .fold((0, 0), |(blocks, total), vox| if let Some(count) = vox {
+                (blocks + 1, total + count)
+            } else {
+                (blocks, total)
+            }
+        );
+
+    bar.write().unwrap().finish();
+    Ok((num_blocks, num_vox * data_attrs_in.get_data_type().size_of()))
+}
+
+fn crop_block<T, N5I, N5O>(
+    n5_in: &N5I,
+    dataset_in: &str,
+    n5_out: &N5O,
+    dataset_out: &str,
+    data_attrs_in: &DatasetAttributes,
+    data_attrs_out: &DatasetAttributes,
+    coord: Vec<i64>,
+) -> Result<Option<usize>>
+    where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::Zero,
+        N5I: N5Reader + Sync + Send + Clone + 'static,
+        N5O: N5Writer + Sync + Send + Clone + 'static,
+        DataType: TypeReflection<T> + DataBlockCreator<T>,
+        VecDataBlock<T>: DataBlock<T> {
+
+    let (offset, size): (Vec<i64>, Vec<i64>) = data_attrs_in.get_dimensions().iter()
+                .zip(data_attrs_in.get_block_size().iter().cloned().map(i64::from))
+                .zip(coord.iter())
+                .map(|((&d, s), &c)| {
+                    let offset = c * s;
+                    let size = std::cmp::min((c + 1) * s, d) - offset;
+                    (offset, size)
+                })
+                .unzip();
+
+    let bbox = BoundingBox::new(offset, size.clone());
+
+    let block_in = n5_in.read_block::<T>(
+        dataset_in,
+        data_attrs_in,
+        coord.clone())?;
+    let num_vox = match block_in {
+        Some(_) => {
+            // TODO: only reading block because it is the only way currently
+            // to test block existence. To be more efficient could either
+            // use another means, or crop from this read block directly rather
+            // than re-reading using the ndarray convenience method.
+            let cropped = n5_in.read_ndarray::<T>(
+                dataset_in,
+                data_attrs_in,
+                &bbox)?;
+            assert!(!cropped.is_standard_layout(),
+                "Array should still be in f-order");
+            let cropped_block = VecDataBlock::<T>::new(
+                size.into_iter().map(|n| n as i32).collect(),
+                coord,
+                cropped.as_slice_memory_order().unwrap().to_owned());
+            n5_out.write_block(dataset_out, data_attrs_out, &cropped_block)?;
+            Some(cropped_block.get_num_elements() as usize)
+        },
+        None => None,
+    };
+
+    Ok(num_vox)
+}
+
+
 fn recompress<N5I, N5O>(
     n5_in: &N5I,
     dataset_in: &str,
@@ -450,6 +637,7 @@ fn recompress_block<T, N5I, N5O>(
 
     Ok(num_vox)
 }
+
 
 struct InvalidBlocks {
     errored: Vec<Vec<i64>>,
