@@ -31,6 +31,7 @@ use indicatif::{
     HumanDuration,
     ProgressBar,
     ProgressDrawTarget,
+    ProgressStyle,
 };
 use itertools::Itertools;
 use n5::prelude::*;
@@ -305,6 +306,16 @@ fn main() {
 }
 
 
+fn default_progress_bar(size: u64) -> ProgressBar {
+    let pbar = ProgressBar::new(size);
+    pbar.set_draw_target(ProgressDrawTarget::stderr());
+    pbar.set_style(ProgressStyle::default_bar()
+        .template("[{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({percent}%) [{eta_precise}]"));
+
+    pbar
+}
+
+
 fn bench_read<N5>(
     n: &N5,
     dataset: &str,
@@ -324,15 +335,14 @@ fn bench_read<N5>(
 
     let coord_iter = data_attrs.coord_iter();
     let total_coords = coord_iter.len();
-    let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
-    bar.write().unwrap().set_draw_target(ProgressDrawTarget::stderr());
+    let pbar = Arc::new(RwLock::new(default_progress_bar(total_coords as u64)));
 
     for coord in coord_iter {
 
         let n_c = n.clone();
         let dataset_c = dataset.to_owned();
         let data_attrs_c = data_attrs.clone();
-        let bar_c = bar.clone();
+        let bar_c = pbar.clone();
         all_jobs.push(pool.spawn_fn(move || {
             // TODO: Have to work around annoying reflection issue.
             let num_vox = match *data_attrs_c.get_data_type() {
@@ -359,7 +369,7 @@ fn bench_read<N5>(
 
     let num_vox: usize = futures::future::join_all(all_jobs).wait()?.iter().sum();
 
-    bar.write().unwrap().finish();
+    pbar.write().unwrap().finish();
     Ok(num_vox * data_attrs.get_data_type().size_of())
 }
 
@@ -423,9 +433,7 @@ fn crop_blocks<N5I, N5O>(
         .map(|c| 0..c)
         .multi_cartesian_product();
 
-
-    let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
-    bar.write().unwrap().set_draw_target(ProgressDrawTarget::stderr());
+    let pbar = Arc::new(RwLock::new(default_progress_bar(total_coords as u64)));
 
     for mut coord in coord_iter {
 
@@ -435,7 +443,7 @@ fn crop_blocks<N5I, N5O>(
         let dataset_out_c = dataset_out.to_owned();
         let data_attrs_in_c = data_attrs_in.clone();
         let data_attrs_out_c = data_attrs_out.clone();
-        let bar_c = bar.clone();
+        let bar_c = pbar.clone();
         coord.insert(axis as usize, axis_ceil - 1);
         all_jobs.push(pool.spawn_fn(move || {
             // TODO: Have to work around annoying reflection issue.
@@ -472,7 +480,7 @@ fn crop_blocks<N5I, N5O>(
             }
         );
 
-    bar.write().unwrap().finish();
+    pbar.write().unwrap().finish();
     Ok((num_blocks, num_vox * data_attrs_in.get_data_type().size_of()))
 }
 
@@ -563,8 +571,7 @@ fn recompress<N5I, N5O>(
 
     let coord_iter = data_attrs_in.coord_iter();
     let total_coords = coord_iter.len();
-    let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
-    bar.write().unwrap().set_draw_target(ProgressDrawTarget::stderr());
+    let pbar = Arc::new(RwLock::new(default_progress_bar(total_coords as u64)));
 
     for coord in coord_iter {
 
@@ -574,7 +581,7 @@ fn recompress<N5I, N5O>(
         let dataset_out_c = dataset_out.to_owned();
         let data_attrs_in_c = data_attrs_in.clone();
         let data_attrs_out_c = data_attrs_out.clone();
-        let bar_c = bar.clone();
+        let bar_c = pbar.clone();
         all_jobs.push(pool.spawn_fn(move || {
             // TODO: Have to work around annoying reflection issue.
             let num_vox = match *data_attrs_in_c.get_data_type() {
@@ -604,7 +611,7 @@ fn recompress<N5I, N5O>(
 
     let num_vox: usize = futures::future::join_all(all_jobs).wait()?.iter().sum();
 
-    bar.write().unwrap().finish();
+    pbar.write().unwrap().finish();
     Ok(num_vox * data_attrs_in.get_data_type().size_of())
 }
 
@@ -671,14 +678,13 @@ fn get_invalid_blocks<N5>(
 
     let coord_iter = data_attrs.coord_iter();
     let total_coords = coord_iter.len();
-    let bar = Arc::new(RwLock::new(ProgressBar::new(total_coords as u64)));
-    bar.write().unwrap().set_draw_target(ProgressDrawTarget::stderr());
+    let pbar = Arc::new(RwLock::new(default_progress_bar(total_coords as u64)));
 
     for coord in coord_iter {
         let n_c = n.clone();
         let dataset_c = dataset.to_owned();
         let data_attrs_c = data_attrs.clone();
-        let bar_c = bar.clone();
+        let bar_c = pbar.clone();
         all_jobs.push(pool.spawn_fn(move || {
             // TODO: Have to work around annoying reflection issue.
             let results = match *data_attrs_c.get_data_type() {
@@ -713,6 +719,7 @@ fn get_invalid_blocks<N5>(
         }
     }
 
+    pbar.write().unwrap().finish();
     Ok(invalid)
 }
 
