@@ -231,10 +231,11 @@ fn main() {
         Command::BenchRead {n5_path, dataset} => {
             let n = N5Filesystem::open(&n5_path).unwrap();
             let started = Instant::now();
-            let num_bytes = bench_read(
+            let num_bytes = BenchRead::run(
                 &n,
                 &dataset,
-                opt.threads).unwrap();
+                opt.threads,
+                ()).unwrap();
             let elapsed = started.elapsed();
             println!("Read {} (uncompressed) in {}",
                 HumanBytes(num_bytes as u64),
@@ -282,10 +283,11 @@ fn main() {
         Command::ValidateBlocks {n5_path, dataset} => {
             let n = N5Filesystem::open(&n5_path).unwrap();
             let started = Instant::now();
-            let invalid = get_invalid_blocks(
+            let invalid = ValidateBlocks::run(
                 &n,
                 &dataset,
-                opt.threads).unwrap();
+                opt.threads,
+                ()).unwrap();
             if !invalid.errored.is_empty() {
                 eprintln!("Found {} errored block(s)", invalid.errored.len());
                 for block_idx in invalid.errored.iter() {
@@ -316,86 +318,158 @@ fn default_progress_bar(size: u64) -> ProgressBar {
 }
 
 
-fn bench_read<N5>(
-    n: &N5,
-    dataset: &str,
-    pool_size: Option<usize>,
-) -> Result<usize>
-    where
-        N5: N5Reader + Sync + Send + Clone + 'static, {
+trait BlockReaderMapReduce {
+    type BlockResult: Send + 'static;
+    type BlockArgument: Send + Clone + 'static;
+    type ReduceResult;
 
-    let data_attrs = n.get_dataset_attributes(dataset)?;
+    fn map<T>(
+        data_attrs: &DatasetAttributes,
+        coord: Vec<i64>,
+        block: Result<Option<VecDataBlock<T>>>,
+        arg: Self::BlockArgument,
+    ) -> Result<Self::BlockResult>
+        where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
+            DataType: TypeReflection<T> + DataBlockCreator<T>,
+            VecDataBlock<T>: n5::DataBlock<T>;
 
-    let mut all_jobs: Vec<CpuFuture<usize, std::io::Error>> =
-        Vec::new();
-    let pool = match pool_size {
-        Some(threads) => CpuPool::new(threads),
-        None => CpuPool::new_num_cpus(),
-    };
+    fn reduce(
+        data_attrs: &DatasetAttributes,
+        results: Vec<Self::BlockResult>,
+    ) -> Self::ReduceResult;
 
-    let coord_iter = data_attrs.coord_iter();
-    let total_coords = coord_iter.len();
-    let pbar = Arc::new(RwLock::new(default_progress_bar(total_coords as u64)));
+    fn map_type_dispatch<N5>(
+        n: &N5,
+        dataset: &str,
+        data_attrs: &DatasetAttributes,
+        coord: Vec<i64>,
+        arg: Self::BlockArgument,
+    ) -> Result<Self::BlockResult>
+        where N5: N5Reader + Sync + Send + Clone + 'static {
 
-    for coord in coord_iter {
-
-        let n_c = n.clone();
-        let dataset_c = dataset.to_owned();
-        let data_attrs_c = data_attrs.clone();
-        let bar_c = pbar.clone();
-        all_jobs.push(pool.spawn_fn(move || {
-            // TODO: Have to work around annoying reflection issue.
-            let num_vox = match *data_attrs_c.get_data_type() {
-                DataType::UINT8 => bench_read_block::<u8, _>(
-                    &n_c,
-                    &dataset_c,
-                    &data_attrs_c,
-                    coord)?,
-                _ => unimplemented!(),
-                // DataType::UINT16 => std::mem::size_of::<u16>(),
-                // DataType::UINT32 => std::mem::size_of::<u32>(),
-                // DataType::UINT64 => std::mem::size_of::<u64>(),
-                // DataType::INT8 => std::mem::size_of::<i8>(),
-                // DataType::INT16 => std::mem::size_of::<i16>(),
-                // DataType::INT32 => std::mem::size_of::<i32>(),
-                // DataType::INT64 => std::mem::size_of::<i64>(),
-                // DataType::FLOAT32 => std::mem::size_of::<f32>(),
-                // DataType::FLOAT64 => std::mem::size_of::<f64>(),
-            };
-            bar_c.write().unwrap().inc(1);
-            Ok(num_vox)
-        }));
+        match *data_attrs.get_data_type() {
+            DataType::UINT8 => {
+                let block = n.read_block::<u8>(dataset, data_attrs, coord.clone());
+                Self::map(data_attrs, coord, block, arg)
+            },
+            DataType::UINT16 => {
+                let block = n.read_block::<u16>(dataset, data_attrs, coord.clone());
+                Self::map(data_attrs, coord, block, arg)
+            },
+            DataType::UINT32 => {
+                let block = n.read_block::<u32>(dataset, data_attrs, coord.clone());
+                Self::map(data_attrs, coord, block, arg)
+            },
+            DataType::UINT64 => {
+                let block = n.read_block::<u64>(dataset, data_attrs, coord.clone());
+                Self::map(data_attrs, coord, block, arg)
+            },
+            DataType::INT8 => {
+                let block = n.read_block::<i8>(dataset, data_attrs, coord.clone());
+                Self::map(data_attrs, coord, block, arg)
+            },
+            DataType::INT16 => {
+                let block = n.read_block::<i16>(dataset, data_attrs, coord.clone());
+                Self::map(data_attrs, coord, block, arg)
+            },
+            DataType::INT32 => {
+                let block = n.read_block::<i32>(dataset, data_attrs, coord.clone());
+                Self::map(data_attrs, coord, block, arg)
+            },
+            DataType::INT64 => {
+                let block = n.read_block::<i64>(dataset, data_attrs, coord.clone());
+                Self::map(data_attrs, coord, block, arg)
+            },
+            DataType::FLOAT32 => {
+                let block = n.read_block::<f32>(dataset, data_attrs, coord.clone());
+                Self::map(data_attrs, coord, block, arg)
+            },
+            DataType::FLOAT64 => {
+                let block = n.read_block::<f64>(dataset, data_attrs, coord.clone());
+                Self::map(data_attrs, coord, block, arg)
+            },
+        }
     }
 
-    let num_vox: usize = futures::future::join_all(all_jobs).wait()?.iter().sum();
+    fn run<N5>(
+        n: &N5,
+        dataset: &str,
+        pool_size: Option<usize>,
+        arg: Self::BlockArgument,
+    ) -> Result<Self::ReduceResult>
+        where
+            N5: N5Reader + Sync + Send + Clone + 'static {
 
-    pbar.write().unwrap().finish();
-    Ok(num_vox * data_attrs.get_data_type().size_of())
+        let data_attrs = n.get_dataset_attributes(dataset)?;
+
+        let coord_iter = data_attrs.coord_iter();
+        let total_coords = coord_iter.len();
+        let pbar = Arc::new(RwLock::new(default_progress_bar(total_coords as u64)));
+
+        let mut all_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
+        let pool = match pool_size {
+            Some(threads) => CpuPool::new(threads),
+            None => CpuPool::new_num_cpus(),
+        };
+
+        for coord in coord_iter {
+
+            let n_c = n.clone();
+            let dataset_c = dataset.to_owned();
+            let data_attrs_c = data_attrs.clone();
+            let bar_c = pbar.clone();
+            let arg_c = arg.clone();
+            all_jobs.push(pool.spawn_fn(move || {
+                let block_result = Self::map_type_dispatch(
+                    &n_c, &dataset_c, &data_attrs_c, coord, arg_c)?;
+                bar_c.write().unwrap().inc(1);
+                Ok(block_result)
+            }));
+        }
+
+        let block_results = futures::future::join_all(all_jobs).wait()?;
+
+        pbar.write().unwrap().finish();
+        Ok(Self::reduce(&data_attrs, block_results))
+    }
 }
 
-fn bench_read_block<T, N5>(
-    n: &N5,
-    dataset: &str,
-    data_attrs: &DatasetAttributes,
-    coord: Vec<i64>,
-) -> Result<usize>
-    where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
-        N5: N5Reader + Sync + Send + Clone + 'static,
-        DataType: TypeReflection<T> + DataBlockCreator<T>,
-        VecDataBlock<T>: n5::DataBlock<T> {
+struct BenchRead;
 
-    let block_in = n.read_block::<T>(
-        dataset,
-        data_attrs,
-        coord)?;
-    let num_vox = match block_in {
-        Some(block) => {
-            block.get_num_elements() as usize
-        },
-        None => 0,
-    };
+impl BlockReaderMapReduce for BenchRead {
+    type BlockResult = usize;
+    type BlockArgument = ();
+    type ReduceResult = usize;
 
-    Ok(num_vox)
+    fn map<T>(
+        _data_attrs: &DatasetAttributes,
+        _coord: Vec<i64>,
+        block_in: Result<Option<VecDataBlock<T>>>,
+        _arg: Self::BlockArgument,
+    ) -> Result<Self::BlockResult>
+        where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
+            DataType: TypeReflection<T> + DataBlockCreator<T>,
+            VecDataBlock<T>: n5::DataBlock<T> {
+
+        let num_vox = match block_in? {
+            Some(block) => {
+                block.get_num_elements() as usize
+            },
+            None => 0,
+        };
+
+        Ok(num_vox)
+    }
+
+    fn reduce(
+        data_attrs: &DatasetAttributes,
+        results: Vec<Self::BlockResult>,
+    ) -> Self::ReduceResult {
+
+        let num_vox: usize = results.iter().sum();
+
+        num_vox * data_attrs.get_data_type().size_of()
+    }
 }
 
 
@@ -660,107 +734,64 @@ impl Default for InvalidBlocks {
     }
 }
 
-fn get_invalid_blocks<N5>(
-    n: &N5,
-    dataset: &str,
-    pool_size: Option<usize>,
-) -> Result<InvalidBlocks>
-    where N5: N5Reader + Sync + Send + Clone + 'static {
-
-    let data_attrs = n.get_dataset_attributes(dataset)?;
-
-    let mut all_jobs: Vec<CpuFuture<_, std::io::Error>> =
-        Vec::new();
-    let pool = match pool_size {
-        Some(threads) => CpuPool::new(threads),
-        None => CpuPool::new_num_cpus(),
-    };
-
-    let coord_iter = data_attrs.coord_iter();
-    let total_coords = coord_iter.len();
-    let pbar = Arc::new(RwLock::new(default_progress_bar(total_coords as u64)));
-
-    for coord in coord_iter {
-        let n_c = n.clone();
-        let dataset_c = dataset.to_owned();
-        let data_attrs_c = data_attrs.clone();
-        let bar_c = pbar.clone();
-        all_jobs.push(pool.spawn_fn(move || {
-            // TODO: Have to work around annoying reflection issue.
-            let results = match *data_attrs_c.get_data_type() {
-                DataType::UINT8 => validate_block::<u8, _>(
-                    &n_c,
-                    &dataset_c,
-                    &data_attrs_c,
-                    coord),
-                _ => unimplemented!(),
-                // DataType::UINT16 => std::mem::size_of::<u16>(),
-                // DataType::UINT32 => std::mem::size_of::<u32>(),
-                // DataType::UINT64 => std::mem::size_of::<u64>(),
-                // DataType::INT8 => std::mem::size_of::<i8>(),
-                // DataType::INT16 => std::mem::size_of::<i16>(),
-                // DataType::INT32 => std::mem::size_of::<i32>(),
-                // DataType::INT64 => std::mem::size_of::<i64>(),
-                // DataType::FLOAT32 => std::mem::size_of::<f32>(),
-                // DataType::FLOAT64 => std::mem::size_of::<f64>(),
-            };
-            bar_c.write().unwrap().inc(1);
-            Ok(results)
-        }));
-    }
-
-    let mut invalid = InvalidBlocks::default();
-
-    for result in futures::future::join_all(all_jobs).wait()?.into_iter() {
-        match result {
-            ValidationResult::Ok => {},
-            ValidationResult::Error(v) => invalid.errored.push(v),
-            ValidationResult::WrongSize(v) => invalid.wrongly_sized.push(v),
-        }
-    }
-
-    pbar.write().unwrap().finish();
-    Ok(invalid)
-}
-
 enum ValidationResult {
     Ok,
     Error(Vec<i64>),
     WrongSize(Vec<i64>),
 }
 
-fn validate_block<T, N5>(
-    n5: &N5,
-    dataset: &str,
-    data_attrs: &DatasetAttributes,
-    coord: Vec<i64>,
-) -> ValidationResult
-    where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
-          N5: N5Reader + Sync + Send + Clone + 'static,
-          DataType: TypeReflection<T> + DataBlockCreator<T>,
-          VecDataBlock<T>: DataBlock<T> {
+struct ValidateBlocks;
 
-    let block_opt = n5.read_block::<T>(
-        dataset,
-        data_attrs,
-        coord.clone());
+impl BlockReaderMapReduce for ValidateBlocks {
+    type BlockResult = ValidationResult;
+    type BlockArgument = ();
+    type ReduceResult = InvalidBlocks;
 
-    match block_opt {
-        Ok(Some(block)) => {
+    fn map<T>(
+        data_attrs: &DatasetAttributes,
+        coord: Vec<i64>,
+        block_opt: Result<Option<VecDataBlock<T>>>,
+        _arg: Self::BlockArgument,
+    ) -> Result<Self::BlockResult>
+        where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
+            DataType: TypeReflection<T> + DataBlockCreator<T>,
+            VecDataBlock<T>: n5::DataBlock<T> {
 
-            let expected_size: Vec<i32> = data_attrs.get_dimensions().iter()
-                .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
-                .zip(coord.iter())
-                .map(|((&d, s), &c)| (std::cmp::min((c + 1) * s, d) - c * s) as i32)
-                .collect();
+        Ok(match block_opt {
+            Ok(Some(block)) => {
 
-            if expected_size == block.get_size() {
-                ValidationResult::Ok
-            } else {
-                ValidationResult::WrongSize(coord)
+                let expected_size: Vec<i32> = data_attrs.get_dimensions().iter()
+                    .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
+                    .zip(coord.iter())
+                    .map(|((&d, s), &c)| (std::cmp::min((c + 1) * s, d) - c * s) as i32)
+                    .collect();
+
+                if expected_size == block.get_size() {
+                    ValidationResult::Ok
+                } else {
+                    ValidationResult::WrongSize(coord)
+                }
+            },
+            Ok(None) => ValidationResult::Ok,
+            Err(_) => ValidationResult::Error(coord),
+        })
+    }
+
+    fn reduce(
+        _data_attrs: &DatasetAttributes,
+        results: Vec<Self::BlockResult>,
+    ) -> Self::ReduceResult {
+
+        let mut invalid = InvalidBlocks::default();
+
+        for result in results.into_iter() {
+            match result {
+                ValidationResult::Ok => {},
+                ValidationResult::Error(v) => invalid.errored.push(v),
+                ValidationResult::WrongSize(v) => invalid.wrongly_sized.push(v),
             }
-        },
-        Ok(None) => ValidationResult::Ok,
-        Err(_) => ValidationResult::Error(coord),
+        }
+
+        invalid
     }
 }
