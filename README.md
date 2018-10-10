@@ -27,6 +27,8 @@ SUBCOMMANDS:
     crop-blocks        Crop wrongly sized blocks to match dataset dimensions at the end of a given axis.
     help               Prints this message or the help of the given subcommand(s)
     ls                 List all datasets under an N5 root.
+    map-fold           Run simple math expressions as folds over blocks. For example, to find the
+                       maximum value in a positive dataset: `map-fold example.n5 dataset 0 "max(acc, x)"`
     recompress         Recompress an existing dataset into a new dataset with a given compression.
     validate-blocks    Report malformed blocks.
 ```
