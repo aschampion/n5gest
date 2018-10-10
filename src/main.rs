@@ -320,14 +320,14 @@ fn default_progress_bar(size: u64) -> ProgressBar {
 
 trait BlockReaderMapReduce {
     type BlockResult: Send + 'static;
-    type BlockArgument: Send + Clone + 'static;
+    type BlockArgument: Send + Sync + 'static;
     type ReduceResult;
 
     fn map<T>(
         data_attrs: &DatasetAttributes,
         coord: Vec<i64>,
         block: Result<Option<VecDataBlock<T>>>,
-        arg: Self::BlockArgument,
+        arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
             DataType: TypeReflection<T> + DataBlockCreator<T>,
@@ -343,7 +343,7 @@ trait BlockReaderMapReduce {
         dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: Vec<i64>,
-        arg: Self::BlockArgument,
+        arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where N5: N5Reader + Sync + Send + Clone + 'static {
 
@@ -404,7 +404,7 @@ trait BlockReaderMapReduce {
 
         let coord_iter = data_attrs.coord_iter();
         let total_coords = coord_iter.len();
-        let pbar = Arc::new(RwLock::new(default_progress_bar(total_coords as u64)));
+        let pbar = RwLock::new(default_progress_bar(total_coords as u64));
 
         let mut all_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
         let pool = match pool_size {
@@ -412,25 +412,37 @@ trait BlockReaderMapReduce {
             None => CpuPool::new_num_cpus(),
         };
 
+        struct Scoped<N5, BlockArgument> {
+            pbar: RwLock<ProgressBar>,
+            n: N5,
+            dataset: String,
+            data_attrs: DatasetAttributes,
+            arg: BlockArgument,
+        }
+        let scoped = Arc::new(Scoped {
+            pbar: pbar,
+            n: n.clone(),
+            dataset: dataset.to_owned(),
+            data_attrs,
+            arg,
+        });
+
         for coord in coord_iter {
 
-            let n_c = n.clone();
-            let dataset_c = dataset.to_owned();
-            let data_attrs_c = data_attrs.clone();
-            let bar_c = pbar.clone();
-            let arg_c = arg.clone();
+            let local = scoped.clone();
+
             all_jobs.push(pool.spawn_fn(move || {
                 let block_result = Self::map_type_dispatch(
-                    &n_c, &dataset_c, &data_attrs_c, coord, arg_c)?;
-                bar_c.write().unwrap().inc(1);
+                    &local.n, &local.dataset, &local.data_attrs, coord, &local.arg)?;
+                local.pbar.write().unwrap().inc(1);
                 Ok(block_result)
             }));
         }
 
         let block_results = futures::future::join_all(all_jobs).wait()?;
 
-        pbar.write().unwrap().finish();
-        Ok(Self::reduce(&data_attrs, block_results))
+        scoped.pbar.write().unwrap().finish();
+        Ok(Self::reduce(&scoped.data_attrs, block_results))
     }
 }
 
@@ -445,7 +457,7 @@ impl BlockReaderMapReduce for BenchRead {
         _data_attrs: &DatasetAttributes,
         _coord: Vec<i64>,
         block_in: Result<Option<VecDataBlock<T>>>,
-        _arg: Self::BlockArgument,
+        _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
             DataType: TypeReflection<T> + DataBlockCreator<T>,
@@ -751,7 +763,7 @@ impl BlockReaderMapReduce for ValidateBlocks {
         data_attrs: &DatasetAttributes,
         coord: Vec<i64>,
         block_opt: Result<Option<VecDataBlock<T>>>,
-        _arg: Self::BlockArgument,
+        _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
             DataType: TypeReflection<T> + DataBlockCreator<T>,
