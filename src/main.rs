@@ -241,7 +241,7 @@ fn main() {
                 HumanBytes(num_bytes as u64),
                 HumanDuration(elapsed));
             let throughput = 1e9 * (num_bytes as f64) /
-                (1e9 * (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64));
+                (1e9 * (elapsed.as_secs() as f64) + f64::from(elapsed.subsec_nanos()));
             println!("({} / s)", HumanBytes(throughput as u64));
         },
         Command::CropBlocks(ref crop_opt) => {
@@ -281,9 +281,13 @@ fn main() {
                     data_attrs_out: None, // TODO: this is a hack.
                     compression,
                 }).unwrap();
+            let elapsed = started.elapsed();
             println!("Converted {} (uncompressed) in {}",
                 HumanBytes(num_bytes as u64),
-                HumanDuration(started.elapsed()));
+                HumanDuration(elapsed));
+            let throughput = 1e9 * (num_bytes as f64) /
+                (1e9 * (elapsed.as_secs() as f64) + f64::from(elapsed.subsec_nanos()));
+            println!("({} / s)", HumanBytes(throughput as u64));
         },
         Command::ValidateBlocks {n5_path, dataset} => {
             let n = N5Filesystem::open(&n5_path).unwrap();
