@@ -250,13 +250,15 @@ fn main() {
             println!("Cropping along {}", crop_opt.axis);
 
             let started = Instant::now();
-            let (num_blocks, num_bytes) = crop_blocks(
+            let (num_blocks, num_bytes) = CropBlocks::run(
                 &n5_in,
                 &crop_opt.input_dataset,
-                &n5_out,
-                &crop_opt.output_dataset,
-                crop_opt.axis,
-                opt.threads).unwrap();
+                opt.threads,
+                CropBlocksArguments {
+                    n5_out,
+                    dataset_out: crop_opt.output_dataset.to_owned(),
+                    axis: crop_opt.axis,
+                }).unwrap();
             println!("Converted {} blocks with {} (uncompressed) in {}",
                 num_blocks,
                 HumanBytes(num_bytes as u64),
@@ -269,13 +271,16 @@ fn main() {
             println!("Recompressing with {}", compression);
 
             let started = Instant::now();
-            let num_bytes = recompress(
+            let num_bytes = Recompress::run(
                 &n5_in,
                 &com_opt.input_dataset,
-                &n5_out,
-                &com_opt.output_dataset,
-                compression,
-                opt.threads).unwrap();
+                opt.threads,
+                RecompressArguments {
+                    n5_out,
+                    dataset_out: com_opt.output_dataset.to_owned(),
+                    data_attrs_out: None, // TODO: this is a hack.
+                    compression,
+                }).unwrap();
             println!("Converted {} (uncompressed) in {}",
                 HumanBytes(num_bytes as u64),
                 HumanDuration(started.elapsed()));
@@ -323,13 +328,39 @@ trait BlockReaderMapReduce {
     type BlockArgument: Send + Sync + 'static;
     type ReduceResult;
 
-    fn map<T>(
+    fn setup<N5> (
+        _n: &N5,
+        _dataset: &str,
+        _data_attrs: &DatasetAttributes,
+        _arg: &mut Self::BlockArgument,
+    ) -> Result<()>
+        where N5: N5Reader + Sync + Send + Clone + 'static {
+
+        Ok(())
+    }
+
+    fn coord_iter(
+        data_attrs: &DatasetAttributes,
+        _arg: &Self::BlockArgument,
+    ) -> (Box<Iterator<Item = Vec<i64>>>, usize) {
+
+        let coord_iter = data_attrs.coord_iter();
+        let total_coords = coord_iter.len();
+
+        (Box::new(coord_iter), total_coords)
+    }
+
+    fn map<N5, T>(
+        n: &N5,
+        dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: Vec<i64>,
         block: Result<Option<VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
+        where
+            N5: N5Reader + Sync + Send + Clone + 'static,
+            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::Zero,
             DataType: TypeReflection<T> + DataBlockCreator<T>,
             VecDataBlock<T>: n5::DataBlock<T>;
 
@@ -350,43 +381,43 @@ trait BlockReaderMapReduce {
         match *data_attrs.get_data_type() {
             DataType::UINT8 => {
                 let block = n.read_block::<u8>(dataset, data_attrs, coord.clone());
-                Self::map(data_attrs, coord, block, arg)
+                Self::map(n, dataset, data_attrs, coord, block, arg)
             },
             DataType::UINT16 => {
                 let block = n.read_block::<u16>(dataset, data_attrs, coord.clone());
-                Self::map(data_attrs, coord, block, arg)
+                Self::map(n, dataset, data_attrs, coord, block, arg)
             },
             DataType::UINT32 => {
                 let block = n.read_block::<u32>(dataset, data_attrs, coord.clone());
-                Self::map(data_attrs, coord, block, arg)
+                Self::map(n, dataset, data_attrs, coord, block, arg)
             },
             DataType::UINT64 => {
                 let block = n.read_block::<u64>(dataset, data_attrs, coord.clone());
-                Self::map(data_attrs, coord, block, arg)
+                Self::map(n, dataset, data_attrs, coord, block, arg)
             },
             DataType::INT8 => {
                 let block = n.read_block::<i8>(dataset, data_attrs, coord.clone());
-                Self::map(data_attrs, coord, block, arg)
+                Self::map(n, dataset, data_attrs, coord, block, arg)
             },
             DataType::INT16 => {
                 let block = n.read_block::<i16>(dataset, data_attrs, coord.clone());
-                Self::map(data_attrs, coord, block, arg)
+                Self::map(n, dataset, data_attrs, coord, block, arg)
             },
             DataType::INT32 => {
                 let block = n.read_block::<i32>(dataset, data_attrs, coord.clone());
-                Self::map(data_attrs, coord, block, arg)
+                Self::map(n, dataset, data_attrs, coord, block, arg)
             },
             DataType::INT64 => {
                 let block = n.read_block::<i64>(dataset, data_attrs, coord.clone());
-                Self::map(data_attrs, coord, block, arg)
+                Self::map(n, dataset, data_attrs, coord, block, arg)
             },
             DataType::FLOAT32 => {
                 let block = n.read_block::<f32>(dataset, data_attrs, coord.clone());
-                Self::map(data_attrs, coord, block, arg)
+                Self::map(n, dataset, data_attrs, coord, block, arg)
             },
             DataType::FLOAT64 => {
                 let block = n.read_block::<f64>(dataset, data_attrs, coord.clone());
-                Self::map(data_attrs, coord, block, arg)
+                Self::map(n, dataset, data_attrs, coord, block, arg)
             },
         }
     }
@@ -395,15 +426,17 @@ trait BlockReaderMapReduce {
         n: &N5,
         dataset: &str,
         pool_size: Option<usize>,
-        arg: Self::BlockArgument,
+        mut arg: Self::BlockArgument,
     ) -> Result<Self::ReduceResult>
         where
             N5: N5Reader + Sync + Send + Clone + 'static {
 
         let data_attrs = n.get_dataset_attributes(dataset)?;
 
-        let coord_iter = data_attrs.coord_iter();
-        let total_coords = coord_iter.len();
+        Self::setup(n, dataset, &data_attrs, &mut arg)?;
+
+
+        let (coord_iter, total_coords) = Self::coord_iter(&data_attrs, &arg);
         let pbar = RwLock::new(default_progress_bar(total_coords as u64));
 
         let mut all_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
@@ -420,7 +453,7 @@ trait BlockReaderMapReduce {
             arg: BlockArgument,
         }
         let scoped = Arc::new(Scoped {
-            pbar: pbar,
+            pbar,
             n: n.clone(),
             dataset: dataset.to_owned(),
             data_attrs,
@@ -453,13 +486,17 @@ impl BlockReaderMapReduce for BenchRead {
     type BlockArgument = ();
     type ReduceResult = usize;
 
-    fn map<T>(
+    fn map<N5, T>(
+        _n: &N5,
+        _dataset: &str,
         _data_attrs: &DatasetAttributes,
         _coord: Vec<i64>,
         block_in: Result<Option<VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
+        where
+            N5: N5Reader + Sync + Send + Clone + 'static,
+            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
             DataType: TypeReflection<T> + DataBlockCreator<T>,
             VecDataBlock<T>: n5::DataBlock<T> {
 
@@ -485,250 +522,193 @@ impl BlockReaderMapReduce for BenchRead {
 }
 
 
-fn crop_blocks<N5I, N5O>(
-    n5_in: &N5I,
-    dataset_in: &str,
-    n5_out: &N5O,
-    dataset_out: &str,
+struct CropBlocks<N5O> {
+    _phantom: std::marker::PhantomData<N5O>,
+}
+
+#[derive(Clone)]
+struct CropBlocksArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
+    n5_out: N5O,
+    dataset_out: String,
     axis: i32,
-    pool_size: Option<usize>,
-) -> Result<(usize, usize)>
-    where
-        N5I: N5Reader + Sync + Send + Clone + 'static,
-        N5O: N5Writer + Sync + Send + Clone + 'static, {
+}
 
-    let data_attrs_in = n5_in.get_dataset_attributes(dataset_in)?;
-    let data_attrs_out = data_attrs_in.clone();
+impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for CropBlocks<N5O> {
+    type BlockResult = Option<usize>;
+    type BlockArgument = CropBlocksArguments<N5O>;
+    type ReduceResult = (usize, usize);
 
-    n5_out.create_dataset(dataset_out, &data_attrs_out)?;
+    fn setup<N5> (
+        _n: &N5,
+        dataset: &str,
+        data_attrs: &DatasetAttributes,
+        arg: &mut Self::BlockArgument,
+    ) -> Result<()>
+        where N5: N5Reader + Sync + Send + Clone + 'static {
 
-    let mut all_jobs: Vec<CpuFuture<_, std::io::Error>> =
-        Vec::new();
-    let pool = match pool_size {
-        Some(threads) => CpuPool::new(threads),
-        None => CpuPool::new_num_cpus(),
-    };
-
-    let mut coord_ceil = data_attrs_in.get_dimensions().iter()
-        .zip(data_attrs_in.get_block_size().iter())
-        .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
-        .collect::<Vec<_>>();
-    let axis_ceil = coord_ceil.remove(axis as usize);
-    let total_coords: i64 = coord_ceil.iter().product();
-    let coord_iter = coord_ceil.into_iter()
-        .map(|c| 0..c)
-        .multi_cartesian_product();
-
-    let pbar = Arc::new(RwLock::new(default_progress_bar(total_coords as u64)));
-
-    for mut coord in coord_iter {
-
-        let n5_in_c = n5_in.clone();
-        let n5_out_c = n5_out.clone();
-        let dataset_in_c = dataset_in.to_owned();
-        let dataset_out_c = dataset_out.to_owned();
-        let data_attrs_in_c = data_attrs_in.clone();
-        let data_attrs_out_c = data_attrs_out.clone();
-        let bar_c = pbar.clone();
-        coord.insert(axis as usize, axis_ceil - 1);
-        all_jobs.push(pool.spawn_fn(move || {
-            // TODO: Have to work around annoying reflection issue.
-            let counts = match *data_attrs_in_c.get_data_type() {
-                DataType::UINT8 => crop_block::<u8, _, _>(
-                    &n5_in_c,
-                    &dataset_in_c,
-                    &n5_out_c,
-                    &dataset_out_c,
-                    &data_attrs_in_c,
-                    &data_attrs_out_c,
-                    coord)?,
-                _ => unimplemented!(),
-                // DataType::UINT16 => std::mem::size_of::<u16>(),
-                // DataType::UINT32 => std::mem::size_of::<u32>(),
-                // DataType::UINT64 => std::mem::size_of::<u64>(),
-                // DataType::INT8 => std::mem::size_of::<i8>(),
-                // DataType::INT16 => std::mem::size_of::<i16>(),
-                // DataType::INT32 => std::mem::size_of::<i32>(),
-                // DataType::INT64 => std::mem::size_of::<i64>(),
-                // DataType::FLOAT32 => std::mem::size_of::<f32>(),
-                // DataType::FLOAT64 => std::mem::size_of::<f64>(),
-            };
-            bar_c.write().unwrap().inc(1);
-            Ok(counts)
-        }));
+        arg.n5_out.create_dataset(dataset, data_attrs)
     }
 
-    let (num_blocks, num_vox): (usize, usize) = futures::future::join_all(all_jobs).wait()?.iter()
-        .fold((0, 0), |(blocks, total), vox| if let Some(count) = vox {
-                (blocks + 1, total + count)
-            } else {
-                (blocks, total)
-            }
-        );
+    fn coord_iter(
+        data_attrs: &DatasetAttributes,
+        arg: &Self::BlockArgument,
+    ) -> (Box<Iterator<Item = Vec<i64>>>, usize) {
 
-    pbar.write().unwrap().finish();
-    Ok((num_blocks, num_vox * data_attrs_in.get_data_type().size_of()))
+        let axis = arg.axis;
+        let mut coord_ceil = data_attrs.get_dimensions().iter()
+            .zip(data_attrs.get_block_size().iter())
+            .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
+            .collect::<Vec<_>>();
+        let axis_ceil = coord_ceil.remove(axis as usize);
+        let total_coords = coord_ceil.iter().product::<i64>() as usize;
+        let coord_iter = coord_ceil.into_iter()
+            .map(|c| 0..c)
+            .multi_cartesian_product()
+            .map(move |mut c| {
+                c.insert(axis as usize, axis_ceil - 1);
+                c
+            });
+
+        (Box::new(coord_iter), total_coords)
+    }
+
+    fn map<N5, T>(
+        n: &N5,
+        dataset: &str,
+        data_attrs: &DatasetAttributes,
+        coord: Vec<i64>,
+        block_opt: Result<Option<VecDataBlock<T>>>,
+        arg: &Self::BlockArgument,
+    ) -> Result<Self::BlockResult>
+        where
+            N5: N5Reader + Sync + Send + Clone + 'static,
+            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::Zero,
+            DataType: TypeReflection<T> + DataBlockCreator<T>,
+            VecDataBlock<T>: n5::DataBlock<T> {
+
+        let num_vox = match block_opt? {
+            Some(_) => {
+                // TODO: only reading block because it is the only way currently
+                // to test block existence. To be more efficient could either
+                // use another means, or crop from this read block directly rather
+                // than re-reading using the ndarray convenience method.
+
+                let (offset, size): (Vec<i64>, Vec<i64>) = data_attrs.get_dimensions().iter()
+                            .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
+                            .zip(coord.iter())
+                            .map(|((&d, s), &c)| {
+                                let offset = c * s;
+                                let size = std::cmp::min((c + 1) * s, d) - offset;
+                                (offset, size)
+                            })
+                            .unzip();
+
+                let bbox = BoundingBox::new(offset, size.clone());
+
+                let cropped = n.read_ndarray::<T>(
+                    dataset,
+                    data_attrs,
+                    &bbox)?;
+                assert!(!cropped.is_standard_layout(),
+                    "Array should still be in f-order");
+                let cropped_block = VecDataBlock::<T>::new(
+                    size.into_iter().map(|n| n as i32).collect(),
+                    coord,
+                    cropped.as_slice_memory_order().unwrap().to_owned());
+                arg.n5_out.write_block(dataset, data_attrs, &cropped_block)?;
+                Some(cropped_block.get_num_elements() as usize)
+            },
+            None => None,
+        };
+
+        Ok(num_vox)
+    }
+
+    fn reduce(
+        data_attrs: &DatasetAttributes,
+        results: Vec<Self::BlockResult>,
+    ) -> Self::ReduceResult {
+
+        let (num_blocks, num_vox): (usize, usize) = results.iter()
+            .fold((0, 0), |(blocks, total), vox| if let Some(count) = vox {
+                    (blocks + 1, total + count)
+                } else {
+                    (blocks, total)
+                }
+            );
+
+        (num_blocks, num_vox * data_attrs.get_data_type().size_of())
+    }
 }
 
-fn crop_block<T, N5I, N5O>(
-    n5_in: &N5I,
-    dataset_in: &str,
-    n5_out: &N5O,
-    dataset_out: &str,
-    data_attrs_in: &DatasetAttributes,
-    data_attrs_out: &DatasetAttributes,
-    coord: Vec<i64>,
-) -> Result<Option<usize>>
-    where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::Zero,
-        N5I: N5Reader + Sync + Send + Clone + 'static,
-        N5O: N5Writer + Sync + Send + Clone + 'static,
-        DataType: TypeReflection<T> + DataBlockCreator<T>,
-        VecDataBlock<T>: DataBlock<T> {
 
-    let (offset, size): (Vec<i64>, Vec<i64>) = data_attrs_in.get_dimensions().iter()
-                .zip(data_attrs_in.get_block_size().iter().cloned().map(i64::from))
-                .zip(coord.iter())
-                .map(|((&d, s), &c)| {
-                    let offset = c * s;
-                    let size = std::cmp::min((c + 1) * s, d) - offset;
-                    (offset, size)
-                })
-                .unzip();
-
-    let bbox = BoundingBox::new(offset, size.clone());
-
-    let block_in = n5_in.read_block::<T>(
-        dataset_in,
-        data_attrs_in,
-        coord.clone())?;
-    let num_vox = match block_in {
-        Some(_) => {
-            // TODO: only reading block because it is the only way currently
-            // to test block existence. To be more efficient could either
-            // use another means, or crop from this read block directly rather
-            // than re-reading using the ndarray convenience method.
-            let cropped = n5_in.read_ndarray::<T>(
-                dataset_in,
-                data_attrs_in,
-                &bbox)?;
-            assert!(!cropped.is_standard_layout(),
-                "Array should still be in f-order");
-            let cropped_block = VecDataBlock::<T>::new(
-                size.into_iter().map(|n| n as i32).collect(),
-                coord,
-                cropped.as_slice_memory_order().unwrap().to_owned());
-            n5_out.write_block(dataset_out, data_attrs_out, &cropped_block)?;
-            Some(cropped_block.get_num_elements() as usize)
-        },
-        None => None,
-    };
-
-    Ok(num_vox)
+struct Recompress<N5O> {
+    _phantom: std::marker::PhantomData<N5O>,
 }
 
-
-fn recompress<N5I, N5O>(
-    n5_in: &N5I,
-    dataset_in: &str,
-    n5_out: &N5O,
-    dataset_out: &str,
+#[derive(Clone)]
+struct RecompressArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
+    n5_out: N5O,
+    data_attrs_out: Option<DatasetAttributes>,
+    dataset_out: String,
     compression: CompressionType,
-    pool_size: Option<usize>,
-) -> Result<usize>
-    where
-        N5I: N5Reader + Sync + Send + Clone + 'static,
-        N5O: N5Writer + Sync + Send + Clone + 'static, {
-
-    let data_attrs_in = n5_in.get_dataset_attributes(dataset_in)?;
-    let data_attrs_out = DatasetAttributes::new(
-        data_attrs_in.get_dimensions().to_vec(),
-        data_attrs_in.get_block_size().to_vec(),
-        *data_attrs_in.get_data_type(),
-        compression);
-
-    n5_out.create_dataset(dataset_out, &data_attrs_out)?;
-
-    let mut all_jobs: Vec<CpuFuture<usize, std::io::Error>> =
-        Vec::new();
-    let pool = match pool_size {
-        Some(threads) => CpuPool::new(threads),
-        None => CpuPool::new_num_cpus(),
-    };
-
-    let coord_iter = data_attrs_in.coord_iter();
-    let total_coords = coord_iter.len();
-    let pbar = Arc::new(RwLock::new(default_progress_bar(total_coords as u64)));
-
-    for coord in coord_iter {
-
-        let n5_in_c = n5_in.clone();
-        let n5_out_c = n5_out.clone();
-        let dataset_in_c = dataset_in.to_owned();
-        let dataset_out_c = dataset_out.to_owned();
-        let data_attrs_in_c = data_attrs_in.clone();
-        let data_attrs_out_c = data_attrs_out.clone();
-        let bar_c = pbar.clone();
-        all_jobs.push(pool.spawn_fn(move || {
-            // TODO: Have to work around annoying reflection issue.
-            let num_vox = match *data_attrs_in_c.get_data_type() {
-                DataType::UINT8 => recompress_block::<u8, _, _>(
-                    &n5_in_c,
-                    &dataset_in_c,
-                    &n5_out_c,
-                    &dataset_out_c,
-                    &data_attrs_in_c,
-                    &data_attrs_out_c,
-                    coord)?,
-                _ => unimplemented!(),
-                // DataType::UINT16 => std::mem::size_of::<u16>(),
-                // DataType::UINT32 => std::mem::size_of::<u32>(),
-                // DataType::UINT64 => std::mem::size_of::<u64>(),
-                // DataType::INT8 => std::mem::size_of::<i8>(),
-                // DataType::INT16 => std::mem::size_of::<i16>(),
-                // DataType::INT32 => std::mem::size_of::<i32>(),
-                // DataType::INT64 => std::mem::size_of::<i64>(),
-                // DataType::FLOAT32 => std::mem::size_of::<f32>(),
-                // DataType::FLOAT64 => std::mem::size_of::<f64>(),
-            };
-            bar_c.write().unwrap().inc(1);
-            Ok(num_vox)
-        }));
-    }
-
-    let num_vox: usize = futures::future::join_all(all_jobs).wait()?.iter().sum();
-
-    pbar.write().unwrap().finish();
-    Ok(num_vox * data_attrs_in.get_data_type().size_of())
 }
 
-fn recompress_block<T, N5I, N5O>(
-    n5_in: &N5I,
-    dataset_in: &str,
-    n5_out: &N5O,
-    dataset_out: &str,
-    data_attrs_in: &DatasetAttributes,
-    data_attrs_out: &DatasetAttributes,
-    coord: Vec<i64>,
-) -> Result<usize>
-    where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
-        N5I: N5Reader + Sync + Send + Clone + 'static,
-        N5O: N5Writer + Sync + Send + Clone + 'static,
-        DataType: TypeReflection<T> + DataBlockCreator<T>,
-        VecDataBlock<T>: DataBlock<T> {
+impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Recompress<N5O> {
+    type BlockResult = usize;
+    type BlockArgument = RecompressArguments<N5O>;
+    type ReduceResult = usize;
 
-    let block_in = n5_in.read_block::<T>(
-        dataset_in,
-        data_attrs_in,
-        coord)?;
-    let num_vox = match block_in {
-        Some(block) => {
-            n5_out.write_block(dataset_out, data_attrs_out, &block)?;
-            block.get_num_elements() as usize
-        },
-        None => 0,
-    };
+    fn setup<N5> (
+        _n: &N5,
+        _dataset: &str,
+        data_attrs: &DatasetAttributes,
+        arg: &mut Self::BlockArgument,
+    ) -> Result<()>
+        where N5: N5Reader + Sync + Send + Clone + 'static {
 
-    Ok(num_vox)
+        arg.data_attrs_out = Some(DatasetAttributes::new(
+            data_attrs.get_dimensions().to_vec(),
+            data_attrs.get_block_size().to_vec(),
+            *data_attrs.get_data_type(),
+            arg.compression.clone()));
+        arg.n5_out.create_dataset(&arg.dataset_out, arg.data_attrs_out.as_ref().unwrap())
+    }
+
+    fn map<N5, T>(
+        _n: &N5,
+        _dataset: &str,
+        _data_attrs: &DatasetAttributes,
+        _coord: Vec<i64>,
+        block_opt: Result<Option<VecDataBlock<T>>>,
+        arg: &Self::BlockArgument,
+    ) -> Result<Self::BlockResult>
+        where
+            N5: N5Reader + Sync + Send + Clone + 'static,
+            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
+            DataType: TypeReflection<T> + DataBlockCreator<T>,
+            VecDataBlock<T>: n5::DataBlock<T> {
+
+        let num_vox = match block_opt? {
+            Some(block) => {
+                arg.n5_out.write_block(&arg.dataset_out, &arg.data_attrs_out.as_ref().unwrap(), &block)?;
+                block.get_num_elements() as usize
+            },
+            None => 0,
+        };
+
+        Ok(num_vox)
+    }
+
+    fn reduce(
+        data_attrs: &DatasetAttributes,
+        results: Vec<Self::BlockResult>,
+    ) -> Self::ReduceResult {
+
+        let num_vox: usize = results.iter().sum();
+
+        num_vox * data_attrs.get_data_type().size_of()
+    }
 }
 
 
@@ -759,13 +739,17 @@ impl BlockReaderMapReduce for ValidateBlocks {
     type BlockArgument = ();
     type ReduceResult = InvalidBlocks;
 
-    fn map<T>(
+    fn map<N5, T>(
+        _n: &N5,
+        _dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: Vec<i64>,
         block_opt: Result<Option<VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
+        where
+            N5: N5Reader + Sync + Send + Clone + 'static,
+            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
             DataType: TypeReflection<T> + DataBlockCreator<T>,
             VecDataBlock<T>: n5::DataBlock<T> {
 
