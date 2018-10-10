@@ -364,7 +364,8 @@ fn default_progress_bar(size: u64) -> ProgressBar {
     let pbar = ProgressBar::new(size);
     pbar.set_draw_target(ProgressDrawTarget::stderr());
     pbar.set_style(ProgressStyle::default_bar()
-        .template("[{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({percent}%) [{eta_precise}]"));
+        .template("[{elapsed_precise}] [{wide_bar:.cyan/blue}] \
+            {bytes}/{total_bytes} ({percent}%) [{eta_precise}]"));
 
     pbar
 }
