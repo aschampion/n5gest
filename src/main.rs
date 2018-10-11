@@ -1,3 +1,4 @@
+extern crate chrono;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate indicatif;
@@ -49,6 +50,7 @@ mod crop_blocks;
 mod list;
 mod map_fold;
 mod recompress;
+mod stat;
 mod validate_blocks;
 
 
@@ -69,6 +71,10 @@ enum Command {
     /// List all datasets under an N5 root.
     #[structopt(name = "ls")]
     List(list::ListOptions),
+    /// Retrieve metadata about the number of blocks that exists and their
+    /// timestamps.
+    #[structopt(name = "stat")]
+    Stat(stat::StatOptions),
     /// Benchmark reading an entire dataset.
     #[structopt(name = "bench-read")]
     BenchRead(bench_read::BenchReadOptions),
@@ -145,6 +151,8 @@ fn main() {
     match opt.command {
         Command::List(ref ls_opt) =>
             list::ListCommand::run(&opt, ls_opt).unwrap(),
+        Command::Stat(ref st_opt) =>
+            stat::StatCommand::run(&opt, st_opt).unwrap(),
         Command::BenchRead(ref br_opt) =>
             bench_read::BenchReadCommand::run(&opt, br_opt).unwrap(),
         Command::CropBlocks(ref crop_opt) =>
