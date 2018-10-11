@@ -34,7 +34,6 @@ use indicatif::{
     ProgressDrawTarget,
     ProgressStyle,
 };
-use itertools::Itertools;
 use n5::prelude::*;
 use n5::DataBlockCreator;
 use num_traits::{
@@ -43,6 +42,15 @@ use num_traits::{
 };
 use prettytable::Table;
 use structopt::StructOpt;
+
+
+mod bench_read;
+mod crop_blocks;
+mod list;
+mod map_fold;
+mod recompress;
+mod validate_blocks;
+
 
 /// Utilities for N5 files.
 #[derive(StructOpt, Debug)]
@@ -60,101 +68,32 @@ struct Options {
 enum Command {
     /// List all datasets under an N5 root.
     #[structopt(name = "ls")]
-    List {
-        /// N5 root path
-        #[structopt(name = "N5")]
-        n5_path: String,
-    },
+    List(list::ListOptions),
     /// Benchmark reading an entire dataset.
     #[structopt(name = "bench-read")]
-    BenchRead {
-        /// Input N5 root path
-        #[structopt(name = "N5")]
-        n5_path: String,
-        /// Input N5 dataset
-        #[structopt(name = "DATASET")]
-        dataset: String,
-    },
+    BenchRead(bench_read::BenchReadOptions),
     /// Crop wrongly sized blocks to match dataset dimensions at the end of a
     /// given axis.
     #[structopt(name = "crop-blocks")]
-    CropBlocks(CropBlocksOptions),
+    CropBlocks(crop_blocks::CropBlocksOptions),
     /// Run simple math expressions as folds over blocks.
     /// For example, to find the maximum value in a positive dataset:
     /// `map-fold example.n5 dataset 0 "max(acc, x)"`
     #[structopt(name = "map-fold")]
-    MapFold(MapFoldOptions),
+    MapFold(map_fold::MapFoldOptions),
     /// Recompress an existing dataset into a new dataset with a given
     /// compression.
     #[structopt(name = "recompress")]
-    Recompress(RecompressOptions),
+    Recompress(recompress::RecompressOptions),
     /// Report malformed blocks.
     #[structopt(name = "validate-blocks")]
-    ValidateBlocks {
-        /// Input N5 root path
-        #[structopt(name = "N5")]
-        n5_path: String,
-        /// Input N5 dataset
-        #[structopt(name = "DATASET")]
-        dataset: String,
-    },
+    ValidateBlocks(validate_blocks::ValidateBlocksOptions),
 }
 
-#[derive(StructOpt, Debug)]
-struct CropBlocksOptions {
-    /// Input N5 root path
-    #[structopt(name = "INPUT_N5")]
-    input_n5_path: String,
-    /// Input N5 dataset
-    #[structopt(name = "INPUT_DATASET")]
-    input_dataset: String,
-    /// Axis to check
-    #[structopt(name = "AXIS")]
-    axis: i32,
-    /// Output N5 root path
-    #[structopt(name = "OUTPUT_N5")]
-    output_n5_path: String,
-    /// Output N5 dataset
-    #[structopt(name = "OUPUT_DATASET")]
-    output_dataset: String,
-}
+trait CommandType {
+    type Options: StructOpt;
 
-#[derive(StructOpt, Debug)]
-struct MapFoldOptions {
-    /// Input N5 root path
-    #[structopt(name = "N5")]
-    n5_path: String,
-    /// Input N5 dataset
-    #[structopt(name = "DATASET")]
-    dataset: String,
-    /// Initial value for fold accumulation
-    #[structopt(name = "INITIAL_VAL")]
-    initial_val: f64,
-    /// Expression for folding over values `x` with an accumulator `acc`
-    #[structopt(name = "FOLD_EXPR")]
-    fold_expr: String,
-    /// Expression for folding over block results. By default FOLD_EXPR is used.
-    #[structopt(name = "BLOCK_FOLD_EXPR")]
-    block_fold_expr: Option<String>,
-}
-
-#[derive(StructOpt, Debug)]
-struct RecompressOptions {
-    /// Input N5 root path
-    #[structopt(name = "INPUT_N5")]
-    input_n5_path: String,
-    /// Input N5 dataset
-    #[structopt(name = "INPUT_DATASET")]
-    input_dataset: String,
-    /// New N5 compression (JSON)
-    #[structopt(name = "COMPRESSION")]
-    compression: String,
-    /// Output N5 root path
-    #[structopt(name = "OUTPUT_N5")]
-    output_n5_path: String,
-    /// Output N5 dataset
-    #[structopt(name = "OUPUT_DATASET")]
-    output_dataset: String,
+    fn run(opt: &Options, com_opt: &Self::Options) -> Result<()>;
 }
 
 #[derive(FromPrimitive, ToPrimitive)]
@@ -204,158 +143,18 @@ fn main() {
     let opt = Options::from_args();
 
     match opt.command {
-        Command::List {n5_path} => {
-            let n = N5Filesystem::open(&n5_path).unwrap();
-            let mut group_stack = vec![("".to_owned(), n.list("").unwrap().into_iter())];
-
-            let mut datasets = vec![];
-
-            while let Some((mut g_path, mut g_iter)) = group_stack.pop() {
-                if let Some(next_item) = g_iter.next() {
-                    let path: String = if g_path.is_empty() {
-                        next_item
-                    } else {
-                        g_path.clone() + "/" + &next_item
-                    };
-                    group_stack.push((g_path, g_iter));
-                    if let Ok(ds_attr) = n.get_dataset_attributes(&path) {
-                        datasets.push((path, ds_attr));
-                    } else {
-                        let next_g_iter = n.list(&path).unwrap().into_iter();
-                        group_stack.push((path, next_g_iter));
-                    }
-                }
-            }
-
-            let mut table = Table::new();
-            table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
-            table.set_titles(row![
-                "Path",
-                r -> "Dims",
-                r -> "Max vox",
-                r -> "Block",
-                "Dtype",
-                "Compression",
-            ]);
-
-            for (path, attr) in datasets {
-                let numel = attr.get_dimensions().iter().map(|&n| n as usize).product();
-                let (numel, prefix) = MetricPrefix::reduce(numel);
-                table.add_row(row![
-                    b -> path,
-                    r -> format!("{:?}", attr.get_dimensions()),
-                    r -> format!("{} {}", numel, prefix),
-                    r -> format!("{:?}", attr.get_block_size()),
-                    format!("{:?}", attr.get_data_type()),
-                    attr.get_compression(),
-                ]);
-            }
-
-            table.printstd();
-        },
-        Command::BenchRead {n5_path, dataset} => {
-            let n = N5Filesystem::open(&n5_path).unwrap();
-            let started = Instant::now();
-            let num_bytes = BenchRead::run(
-                &n,
-                &dataset,
-                opt.threads,
-                ()).unwrap();
-            let elapsed = started.elapsed();
-            println!("Read {} (uncompressed) in {}",
-                HumanBytes(num_bytes as u64),
-                HumanDuration(elapsed));
-            let throughput = 1e9 * (num_bytes as f64) /
-                (1e9 * (elapsed.as_secs() as f64) + f64::from(elapsed.subsec_nanos()));
-            println!("({} / s)", HumanBytes(throughput as u64));
-        },
-        Command::CropBlocks(ref crop_opt) => {
-            let n5_in = N5Filesystem::open_or_create(&crop_opt.input_n5_path).unwrap();
-            let n5_out = N5Filesystem::open_or_create(&crop_opt.output_n5_path).unwrap();
-            println!("Cropping along {}", crop_opt.axis);
-
-            let started = Instant::now();
-            let (num_blocks, num_bytes) = CropBlocks::run(
-                &n5_in,
-                &crop_opt.input_dataset,
-                opt.threads,
-                CropBlocksArguments {
-                    n5_out,
-                    dataset_out: crop_opt.output_dataset.to_owned(),
-                    axis: crop_opt.axis,
-                }).unwrap();
-            println!("Converted {} blocks with {} (uncompressed) in {}",
-                num_blocks,
-                HumanBytes(num_bytes as u64),
-                HumanDuration(started.elapsed()));
-        },
-        Command::MapFold(mf_opt) => {
-            let block_fold_expr: meval::Expr = mf_opt.block_fold_expr
-                .unwrap_or(mf_opt.fold_expr.clone()).parse().unwrap();
-            let fold_expr: meval::Expr = mf_opt.fold_expr.parse().unwrap();
-            // let fold_fn = fold_parsed.bind2("acc", "x").unwrap();
-            let n = N5Filesystem::open(&mf_opt.n5_path).unwrap();
-
-            let result = MapFold::run(
-                &n,
-                &mf_opt.dataset,
-                opt.threads,
-                MapFoldArgument {
-                    initial_val: mf_opt.initial_val,
-                    fold_expr,
-                    block_fold_expr,
-                }).unwrap();
-            println!("{}", result);
-        }
-        Command::Recompress(ref com_opt) => {
-            let n5_in = N5Filesystem::open_or_create(&com_opt.input_n5_path).unwrap();
-            let n5_out = N5Filesystem::open_or_create(&com_opt.output_n5_path).unwrap();
-            let compression: CompressionType = serde_json::from_str(&com_opt.compression).unwrap();
-            println!("Recompressing with {}", compression);
-
-            let started = Instant::now();
-            let num_bytes = Recompress::run(
-                &n5_in,
-                &com_opt.input_dataset,
-                opt.threads,
-                RecompressArguments {
-                    n5_out,
-                    dataset_out: com_opt.output_dataset.to_owned(),
-                    data_attrs_out: None, // TODO: this is a hack.
-                    compression,
-                }).unwrap();
-            let elapsed = started.elapsed();
-            println!("Converted {} (uncompressed) in {}",
-                HumanBytes(num_bytes as u64),
-                HumanDuration(elapsed));
-            let throughput = 1e9 * (num_bytes as f64) /
-                (1e9 * (elapsed.as_secs() as f64) + f64::from(elapsed.subsec_nanos()));
-            println!("({} / s)", HumanBytes(throughput as u64));
-        },
-        Command::ValidateBlocks {n5_path, dataset} => {
-            let n = N5Filesystem::open(&n5_path).unwrap();
-            let started = Instant::now();
-            let invalid = ValidateBlocks::run(
-                &n,
-                &dataset,
-                opt.threads,
-                ()).unwrap();
-            if !invalid.errored.is_empty() {
-                eprintln!("Found {} errored block(s)", invalid.errored.len());
-                for block_idx in invalid.errored.iter() {
-                    println!("{}", n.get_block_uri(&dataset, block_idx).unwrap());
-                }
-            }
-            if !invalid.wrongly_sized.is_empty() {
-                eprintln!("Found {} wrongly sized block(s)", invalid.wrongly_sized.len());
-                for block_idx in invalid.wrongly_sized.iter() {
-                    println!("{}", n.get_block_uri(&dataset, block_idx).unwrap());
-                }
-            }
-            eprintln!("Found {} invalid block(s) in {}",
-                invalid.errored.len() + invalid.wrongly_sized.len(),
-                HumanDuration(started.elapsed()));
-        },
+        Command::List(ref ls_opt) =>
+            list::ListCommand::run(&opt, ls_opt).unwrap(),
+        Command::BenchRead(ref br_opt) =>
+            bench_read::BenchReadCommand::run(&opt, br_opt).unwrap(),
+        Command::CropBlocks(ref crop_opt) =>
+            crop_blocks::CropBlocksCommand::run(&opt, crop_opt).unwrap(),
+        Command::MapFold(ref mf_opt) =>
+            map_fold::MapFoldCommand::run(&opt, mf_opt).unwrap(),
+        Command::Recompress(ref com_opt) =>
+            recompress::RecompressCommand::run(&opt, com_opt).unwrap(),
+        Command::ValidateBlocks(ref vb_opt) =>
+            validate_blocks::ValidateBlocksCommand::run(&opt, vb_opt).unwrap(),
     }
 }
 
@@ -526,376 +325,5 @@ trait BlockReaderMapReduce {
 
         scoped.pbar.write().unwrap().finish();
         Ok(Self::reduce(&scoped.data_attrs, block_results, &scoped.arg))
-    }
-}
-
-struct BenchRead;
-
-impl BlockReaderMapReduce for BenchRead {
-    type BlockResult = usize;
-    type BlockArgument = ();
-    type ReduceResult = usize;
-
-    fn map<N5, T>(
-        _n: &N5,
-        _dataset: &str,
-        _data_attrs: &DatasetAttributes,
-        _coord: Vec<i64>,
-        block_in: Result<Option<VecDataBlock<T>>>,
-        _arg: &Self::BlockArgument,
-    ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
-            VecDataBlock<T>: n5::DataBlock<T> {
-
-        let num_vox = match block_in? {
-            Some(block) => {
-                block.get_num_elements() as usize
-            },
-            None => 0,
-        };
-
-        Ok(num_vox)
-    }
-
-    fn reduce(
-        data_attrs: &DatasetAttributes,
-        results: Vec<Self::BlockResult>,
-        _arg: &Self::BlockArgument,
-    ) -> Self::ReduceResult {
-
-        let num_vox: usize = results.iter().sum();
-
-        num_vox * data_attrs.get_data_type().size_of()
-    }
-}
-
-
-struct CropBlocks<N5O> {
-    _phantom: std::marker::PhantomData<N5O>,
-}
-
-#[derive(Clone)]
-struct CropBlocksArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
-    n5_out: N5O,
-    dataset_out: String,
-    axis: i32,
-}
-
-impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for CropBlocks<N5O> {
-    type BlockResult = Option<usize>;
-    type BlockArgument = CropBlocksArguments<N5O>;
-    type ReduceResult = (usize, usize);
-
-    fn setup<N5> (
-        _n: &N5,
-        dataset: &str,
-        data_attrs: &DatasetAttributes,
-        arg: &mut Self::BlockArgument,
-    ) -> Result<()>
-        where N5: N5Reader + Sync + Send + Clone + 'static {
-
-        arg.n5_out.create_dataset(dataset, data_attrs)
-    }
-
-    fn coord_iter(
-        data_attrs: &DatasetAttributes,
-        arg: &Self::BlockArgument,
-    ) -> (Box<Iterator<Item = Vec<i64>>>, usize) {
-
-        let axis = arg.axis;
-        let mut coord_ceil = data_attrs.get_dimensions().iter()
-            .zip(data_attrs.get_block_size().iter())
-            .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
-            .collect::<Vec<_>>();
-        let axis_ceil = coord_ceil.remove(axis as usize);
-        let total_coords = coord_ceil.iter().product::<i64>() as usize;
-        let coord_iter = coord_ceil.into_iter()
-            .map(|c| 0..c)
-            .multi_cartesian_product()
-            .map(move |mut c| {
-                c.insert(axis as usize, axis_ceil - 1);
-                c
-            });
-
-        (Box::new(coord_iter), total_coords)
-    }
-
-    fn map<N5, T>(
-        n: &N5,
-        dataset: &str,
-        data_attrs: &DatasetAttributes,
-        coord: Vec<i64>,
-        block_opt: Result<Option<VecDataBlock<T>>>,
-        arg: &Self::BlockArgument,
-    ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::Zero,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
-            VecDataBlock<T>: n5::DataBlock<T> {
-
-        let num_vox = match block_opt? {
-            Some(_) => {
-                // TODO: only reading block because it is the only way currently
-                // to test block existence. To be more efficient could either
-                // use another means, or crop from this read block directly rather
-                // than re-reading using the ndarray convenience method.
-
-                let (offset, size): (Vec<i64>, Vec<i64>) = data_attrs.get_dimensions().iter()
-                            .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
-                            .zip(coord.iter())
-                            .map(|((&d, s), &c)| {
-                                let offset = c * s;
-                                let size = std::cmp::min((c + 1) * s, d) - offset;
-                                (offset, size)
-                            })
-                            .unzip();
-
-                let bbox = BoundingBox::new(offset, size.clone());
-
-                let cropped = n.read_ndarray::<T>(
-                    dataset,
-                    data_attrs,
-                    &bbox)?;
-                assert!(!cropped.is_standard_layout(),
-                    "Array should still be in f-order");
-                let cropped_block = VecDataBlock::<T>::new(
-                    size.into_iter().map(|n| n as i32).collect(),
-                    coord,
-                    cropped.as_slice_memory_order().unwrap().to_owned());
-                arg.n5_out.write_block(dataset, data_attrs, &cropped_block)?;
-                Some(cropped_block.get_num_elements() as usize)
-            },
-            None => None,
-        };
-
-        Ok(num_vox)
-    }
-
-    fn reduce(
-        data_attrs: &DatasetAttributes,
-        results: Vec<Self::BlockResult>,
-        _arg: &Self::BlockArgument,
-    ) -> Self::ReduceResult {
-
-        let (num_blocks, num_vox): (usize, usize) = results.iter()
-            .fold((0, 0), |(blocks, total), vox| if let Some(count) = vox {
-                    (blocks + 1, total + count)
-                } else {
-                    (blocks, total)
-                }
-            );
-
-        (num_blocks, num_vox * data_attrs.get_data_type().size_of())
-    }
-}
-
-
-struct MapFold;
-
-struct MapFoldArgument {
-    initial_val: f64,
-    // Have to store expressions rather than bound closures because meval
-    // `Context`s' `GuardedFunc` uses non-`Sync` `Rc`.
-    fold_expr: meval::Expr,
-    block_fold_expr: meval::Expr,
-}
-
-impl BlockReaderMapReduce for MapFold {
-    type BlockResult = Option<f64>;
-    type BlockArgument = MapFoldArgument;
-    type ReduceResult = f64;
-
-    fn map<N5, T>(
-        _n: &N5,
-        _dataset: &str,
-        _data_attrs: &DatasetAttributes,
-        _coord: Vec<i64>,
-        block_in: Result<Option<VecDataBlock<T>>>,
-        arg: &Self::BlockArgument,
-    ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::ToPrimitive,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
-            VecDataBlock<T>: n5::DataBlock<T> {
-
-        Ok(block_in?.map(|block| {
-            let fold_fn = arg.fold_expr.clone().bind2("acc", "x").unwrap();
-
-            block.get_data().iter()
-                .map(|x| x.to_f64().unwrap())
-                .fold(arg.initial_val, fold_fn)
-        }))
-    }
-
-    fn reduce(
-        _data_attrs: &DatasetAttributes,
-        results: Vec<Self::BlockResult>,
-        arg: &Self::BlockArgument,
-    ) -> Self::ReduceResult {
-
-        let fold_fn = arg.block_fold_expr.clone().bind2("acc", "x").unwrap();
-
-        results.into_iter()
-            .filter(Option::is_some)
-            .map(Option::unwrap)
-            .fold(arg.initial_val, fold_fn)
-    }
-}
-
-
-struct Recompress<N5O> {
-    _phantom: std::marker::PhantomData<N5O>,
-}
-
-#[derive(Clone)]
-struct RecompressArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
-    n5_out: N5O,
-    data_attrs_out: Option<DatasetAttributes>,
-    dataset_out: String,
-    compression: CompressionType,
-}
-
-impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Recompress<N5O> {
-    type BlockResult = usize;
-    type BlockArgument = RecompressArguments<N5O>;
-    type ReduceResult = usize;
-
-    fn setup<N5> (
-        _n: &N5,
-        _dataset: &str,
-        data_attrs: &DatasetAttributes,
-        arg: &mut Self::BlockArgument,
-    ) -> Result<()>
-        where N5: N5Reader + Sync + Send + Clone + 'static {
-
-        arg.data_attrs_out = Some(DatasetAttributes::new(
-            data_attrs.get_dimensions().to_vec(),
-            data_attrs.get_block_size().to_vec(),
-            *data_attrs.get_data_type(),
-            arg.compression.clone()));
-        arg.n5_out.create_dataset(&arg.dataset_out, arg.data_attrs_out.as_ref().unwrap())
-    }
-
-    fn map<N5, T>(
-        _n: &N5,
-        _dataset: &str,
-        _data_attrs: &DatasetAttributes,
-        _coord: Vec<i64>,
-        block_opt: Result<Option<VecDataBlock<T>>>,
-        arg: &Self::BlockArgument,
-    ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
-            VecDataBlock<T>: n5::DataBlock<T> {
-
-        let num_vox = match block_opt? {
-            Some(block) => {
-                arg.n5_out.write_block(&arg.dataset_out, &arg.data_attrs_out.as_ref().unwrap(), &block)?;
-                block.get_num_elements() as usize
-            },
-            None => 0,
-        };
-
-        Ok(num_vox)
-    }
-
-    fn reduce(
-        data_attrs: &DatasetAttributes,
-        results: Vec<Self::BlockResult>,
-        _arg: &Self::BlockArgument,
-    ) -> Self::ReduceResult {
-
-        let num_vox: usize = results.iter().sum();
-
-        num_vox * data_attrs.get_data_type().size_of()
-    }
-}
-
-
-struct InvalidBlocks {
-    errored: Vec<Vec<i64>>,
-    wrongly_sized: Vec<Vec<i64>>,
-}
-
-impl Default for InvalidBlocks {
-    fn default() -> Self {
-        Self {
-            errored: vec![],
-            wrongly_sized: vec![],
-        }
-    }
-}
-
-enum ValidationResult {
-    Ok,
-    Error(Vec<i64>),
-    WrongSize(Vec<i64>),
-}
-
-struct ValidateBlocks;
-
-impl BlockReaderMapReduce for ValidateBlocks {
-    type BlockResult = ValidationResult;
-    type BlockArgument = ();
-    type ReduceResult = InvalidBlocks;
-
-    fn map<N5, T>(
-        _n: &N5,
-        _dataset: &str,
-        data_attrs: &DatasetAttributes,
-        coord: Vec<i64>,
-        block_opt: Result<Option<VecDataBlock<T>>>,
-        _arg: &Self::BlockArgument,
-    ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
-            VecDataBlock<T>: n5::DataBlock<T> {
-
-        Ok(match block_opt {
-            Ok(Some(block)) => {
-
-                let expected_size: Vec<i32> = data_attrs.get_dimensions().iter()
-                    .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
-                    .zip(coord.iter())
-                    .map(|((&d, s), &c)| (std::cmp::min((c + 1) * s, d) - c * s) as i32)
-                    .collect();
-
-                if expected_size == block.get_size() {
-                    ValidationResult::Ok
-                } else {
-                    ValidationResult::WrongSize(coord)
-                }
-            },
-            Ok(None) => ValidationResult::Ok,
-            Err(_) => ValidationResult::Error(coord),
-        })
-    }
-
-    fn reduce(
-        _data_attrs: &DatasetAttributes,
-        results: Vec<Self::BlockResult>,
-        _arg: &Self::BlockArgument,
-    ) -> Self::ReduceResult {
-
-        let mut invalid = InvalidBlocks::default();
-
-        for result in results.into_iter() {
-            match result {
-                ValidationResult::Ok => {},
-                ValidationResult::Error(v) => invalid.errored.push(v),
-                ValidationResult::WrongSize(v) => invalid.wrongly_sized.push(v),
-            }
-        }
-
-        invalid
     }
 }
