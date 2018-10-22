@@ -20,7 +20,14 @@ n5 = "0.2.3"
 num-traits = "0.2"
 num-derive = "0.2"
 prettytable-rs = "0.8"
+regex = "1"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 structopt = "0.2"
+
+[dependencies.image]
+version = "0.20"
+# Don't include jpeg_rayon dependency, hdr which includes scoped_threadpool, or ico.
+default-features = false
+features = ["gif_codec", "jpeg", "png_codec", "pnm", "tga", "tiff", "webp", "bmp", "dxt"]

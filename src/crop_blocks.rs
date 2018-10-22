@@ -1,7 +1,5 @@
 use super::*;
 
-use itertools::Itertools;
-
 
 #[derive(StructOpt, Debug)]
 pub struct CropBlocksOptions {

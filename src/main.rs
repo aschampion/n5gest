@@ -1,6 +1,7 @@
 extern crate chrono;
 extern crate futures;
 extern crate futures_cpupool;
+extern crate image;
 extern crate indicatif;
 extern crate itertools;
 extern crate meval;
@@ -10,6 +11,7 @@ extern crate num_derive;
 extern crate num_traits;
 #[macro_use]
 extern crate prettytable;
+extern crate regex;
 extern crate serde_json;
 // This `macro_use` is linted in beta and nightly, but is necessary for stable.
 #[macro_use]
@@ -17,6 +19,7 @@ extern crate structopt;
 
 
 use std::io::Result;
+use std::path::PathBuf;
 use std::sync::{
     Arc,
     RwLock,
@@ -35,6 +38,7 @@ use indicatif::{
     ProgressDrawTarget,
     ProgressStyle,
 };
+use itertools::Itertools;
 use n5::prelude::*;
 use n5::DataBlockCreator;
 use num_traits::{
@@ -47,6 +51,7 @@ use structopt::StructOpt;
 
 mod bench_read;
 mod crop_blocks;
+mod import;
 mod list;
 mod map_fold;
 mod recompress;
@@ -82,6 +87,10 @@ enum Command {
     /// given axis.
     #[structopt(name = "crop-blocks")]
     CropBlocks(crop_blocks::CropBlocksOptions),
+    /// Import a sequence of image files as a series of z-sections into a 3D
+    /// N5 dataset.
+    #[structopt(name = "import")]
+    Import(import::ImportOptions),
     /// Run simple math expressions as folds over blocks.
     /// For example, to find the maximum value in a positive dataset:
     /// `map-fold example.n5 dataset 0 "max(acc, x)"`
@@ -157,6 +166,8 @@ fn main() {
             bench_read::BenchReadCommand::run(&opt, br_opt).unwrap(),
         Command::CropBlocks(ref crop_opt) =>
             crop_blocks::CropBlocksCommand::run(&opt, crop_opt).unwrap(),
+        Command::Import(ref imp_opt) =>
+            import::ImportCommand::run(&opt, imp_opt).unwrap(),
         Command::MapFold(ref mf_opt) =>
             map_fold::MapFoldCommand::run(&opt, mf_opt).unwrap(),
         Command::Recompress(ref com_opt) =>
@@ -175,6 +186,31 @@ fn default_progress_bar(size: u64) -> ProgressBar {
             {bytes}/{total_bytes} ({percent}%) [{eta_precise}]"));
 
     pbar
+}
+
+
+fn slab_coord_iter(
+    data_attrs: &DatasetAttributes,
+    axis: usize,
+    slab_coord: i64,
+) -> (impl Iterator<Item = Vec<i64>>, usize) {
+
+    let mut coord_ceil = data_attrs.get_dimensions().iter()
+        .zip(data_attrs.get_block_size().iter())
+        .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
+        .collect::<Vec<_>>();
+    coord_ceil.remove(axis as usize);
+    let total_coords = coord_ceil.iter().product::<i64>() as usize;
+
+    let iter = coord_ceil.into_iter()
+        .map(|c| 0..c)
+        .multi_cartesian_product()
+        .map(move |mut c| {
+            c.insert(axis as usize, slab_coord);
+            c
+        });
+
+    (iter, total_coords)
 }
 
 
