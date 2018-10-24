@@ -193,11 +193,11 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.0.1"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "libc 0.2.40 (registry+https://github.com/rust-lang/crates.io-index)",
- "miniz_oxide_c_api 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "miniz_oxide_c_api 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -403,32 +403,31 @@ dependencies = [
 
 [[package]]
 name = "miniz_oxide"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "adler32 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "libc 0.2.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "miniz_oxide_c_api"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cc 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "crc 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.40 (registry+https://github.com/rust-lang/crates.io-index)",
- "miniz_oxide 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "miniz_oxide 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "n5"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "byteorder 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "bzip2 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "flate2 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "flate2 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "fs2 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -445,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "n5gest"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.20 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -454,7 +453,7 @@ dependencies = [
  "indicatif 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "meval 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "n5 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "n5 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-derive 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "prettytable-rs 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1006,7 +1005,7 @@ dependencies = [
 "checksum either 1.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "3be565ca5c557d7f59e7cfcf1844f9e3033650c929c6566f511e8005f205c1d0"
 "checksum encode_unicode 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7dda4963a6de8b990d05ae23b6d766dde2c65e84e35b297333d137535c65a212"
 "checksum filetime 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)" = "714653f3e34871534de23771ac7b26e999651a0a228f47beb324dfdf1dd4b10f"
-"checksum flate2 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "9fac2277e84e5e858483756647a9d0aa8d9a2b7cba517fd84325a0aaa69a0909"
+"checksum flate2 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "3b0c7353385f92079524de3b7116cf99d73947c08a7472774e9b3b04bff3b901"
 "checksum fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "2fad85553e09a6f881f739c29f0b00b0f01357c743266d478b68951ce23285f3"
 "checksum fs2 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
 "checksum fuchsia-zircon 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2e9763c69ebaae630ba35f74888db465e49e259ba1bc0eda7d06f4a067615d82"
@@ -1033,9 +1032,9 @@ dependencies = [
 "checksum matrixmultiply 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)" = "cac1a66eab356036af85ea093101a14223dc6e3f4c02a59b7d572e5b93270bf7"
 "checksum memchr 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "796fba70e76612589ed2ce7f45282f5af869e0fdd7cc6199fa1aa1f1d591ba9d"
 "checksum meval 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f79496a5651c8d57cd033c5add8ca7ee4e3d5f7587a4777484640d9cb60392d9"
-"checksum miniz_oxide 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "aaa2d3ad070f428fffbd7d3ca2ea20bb0d8cffe9024405c44e1840bc1418b398"
-"checksum miniz_oxide_c_api 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "92d98fdbd6145645828069b37ea92ca3de225e000d80702da25c20d3584b38a5"
-"checksum n5 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "b4865e954b9627621b7c6f602be537c1439e501e9c647404c9a9964b87da3544"
+"checksum miniz_oxide 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "5ad30a47319c16cde58d0314f5d98202a80c9083b5f61178457403dfb14e509c"
+"checksum miniz_oxide_c_api 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "28edaef377517fd9fe3e085c37d892ce7acd1fbeab9239c5a36eec352d8a8b7e"
+"checksum n5 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = "8d12b9f7bc57e3d59cc875384f3d07feed4d606465ca89707ea7431d7e1be831"
 "checksum ndarray 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f5bf09937703fa3180e16a769f2e6635a4bacb51bdada536b820ad5b52e84c5d"
 "checksum nom 1.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = "a5b8c256fd9471521bcb84c3cdba98921497f1a331cbc15b8030fc63b82050ce"
 "checksum num-complex 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "68de83578789e0fbda3fa923035be83cf8bfd3b30ccfdecd5aa89bf8601f408e"

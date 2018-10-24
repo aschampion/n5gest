@@ -7,7 +7,7 @@ Written in Rust using the [Rust N5 crate](https://crates.io/crates/n5).
 ```console
 $ cargo build --release
 $ target/release/n5gest -h
-n5gest 0.1.0
+n5gest 0.2.0
 Andrew Champion <andrew.champion@gmail.com>
 Utilities for N5 files.
 
