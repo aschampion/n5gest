@@ -199,6 +199,30 @@ where
                 slab_img_buff,
                 data_attrs)
         },
+        DataType::UINT16 => {
+            slab_block_writer::<_, u16>(
+                n,
+                dataset,
+                coord,
+                slab_img_buff,
+                data_attrs)
+        },
+        DataType::UINT32 => {
+            slab_block_writer::<_, u32>(
+                n,
+                dataset,
+                coord,
+                slab_img_buff,
+                data_attrs)
+        },
+        DataType::UINT64 => {
+            slab_block_writer::<_, u64>(
+                n,
+                dataset,
+                coord,
+                slab_img_buff,
+                data_attrs)
+        },
         _ => unimplemented!(),
     }
 }
