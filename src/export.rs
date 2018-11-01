@@ -266,17 +266,19 @@ where
         },
     };
 
-    let mut data_offset: usize = slab_min * (crop_block_size[0] * crop_block_size[1]) as usize;
+    let mut data_offset = dtype_size * slab_min *
+        (crop_block_size[0] * crop_block_size[1]) as usize;
     let row_bytes = (crop_block_size[0] as usize) * dtype_size;
 
     for z in slab_min..min(slab_max, crop_block_size[2] as usize) {
-        let mut offset: usize = (data_attrs.get_dimensions()[0] * block_loc[1] + block_loc[0]) as usize;
+        let mut offset = dtype_size *
+            (data_attrs.get_dimensions()[0] * block_loc[1] + block_loc[0]) as usize;
 
         let mut img_write = slab_img_buff[z].write().unwrap();
         for _y in 0..crop_block_size[1] {
             img_write[offset..(offset + row_bytes)].copy_from_slice(
                 &byte_data[data_offset..(data_offset + row_bytes)]);
-            offset += data_attrs.get_dimensions()[0] as usize;
+            offset += dtype_size * data_attrs.get_dimensions()[0] as usize;
             data_offset += row_bytes;
         }
     }
