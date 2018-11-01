@@ -13,6 +13,7 @@ extern crate num_traits;
 extern crate prettytable;
 extern crate regex;
 extern crate serde_json;
+extern crate strfmt;
 // This `macro_use` is linted in beta and nightly, but is necessary for stable.
 #[macro_use]
 extern crate structopt;
@@ -51,6 +52,7 @@ use structopt::StructOpt;
 
 mod bench_read;
 mod crop_blocks;
+mod export;
 mod import;
 mod list;
 mod map_fold;
@@ -87,6 +89,9 @@ enum Command {
     /// given axis.
     #[structopt(name = "crop-blocks")]
     CropBlocks(crop_blocks::CropBlocksOptions),
+    /// Export a sequence of image files from a series of z-sections.
+    #[structopt(name = "export")]
+    Export(export::ExportOptions),
     /// Import a sequence of image files as a series of z-sections into a 3D
     /// N5 dataset.
     #[structopt(name = "import")]
@@ -166,6 +171,8 @@ fn main() {
             bench_read::BenchReadCommand::run(&opt, br_opt).unwrap(),
         Command::CropBlocks(ref crop_opt) =>
             crop_blocks::CropBlocksCommand::run(&opt, crop_opt).unwrap(),
+        Command::Export(ref exp_opt) =>
+            export::ExportCommand::run(&opt, exp_opt).unwrap(),
         Command::Import(ref imp_opt) =>
             import::ImportCommand::run(&opt, imp_opt).unwrap(),
         Command::MapFold(ref mf_opt) =>
