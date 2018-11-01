@@ -63,12 +63,12 @@ impl CommandType for ExportCommand {
 
         for slab_coord in slab_min..slab_max {
             export_slab(
-                n.clone(),
-                dataset.clone(),
+                &n,
+                &dataset,
                 &pool,
-                slab_img_buff.clone(),
-                file_format.clone(),
-                data_attrs.clone(),
+                &slab_img_buff,
+                &file_format,
+                &data_attrs,
                 slab_coord,
                 exp_opt.z_min,
                 exp_opt.z_max)?;
@@ -103,12 +103,12 @@ fn dtype_to_color(dtype: &DataType) -> image::ColorType {
 
 
 fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
-    n: Arc<N5>,
-    dataset: Arc<String>,
+    n: &Arc<N5>,
+    dataset: &Arc<String>,
     pool: &CpuPool,
-    slab_img_buff: Arc<Vec<RwLock<Vec<u8>>>>,
-    file_format: Arc<String>,
-    data_attrs: Arc<DatasetAttributes>,
+    slab_img_buff: &Arc<Vec<RwLock<Vec<u8>>>>,
+    file_format: &Arc<String>,
+    data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
     z_min: usize,
     z_max: usize,
@@ -171,7 +171,7 @@ fn slab_block_dispatch<N5>(
     n: &N5,
     dataset: &str,
     coord: Vec<i64>,
-    slab_img_buff: &Vec<RwLock<Vec<u8>>>,
+    slab_img_buff: &[RwLock<Vec<u8>>],
     data_attrs: &DatasetAttributes,
     slab_min: usize,
     slab_max: usize,
@@ -183,7 +183,7 @@ where
         DataType::UINT8 => {
             let block = n.read_block::<u8>(dataset, data_attrs, coord.clone());
             slab_block_reader::<u8>(
-                coord,
+                &coord,
                 block,
                 slab_img_buff,
                 data_attrs,
@@ -193,7 +193,7 @@ where
         DataType::UINT16 => {
             let block = n.read_block::<u16>(dataset, data_attrs, coord.clone());
             slab_block_reader::<u16>(
-                coord,
+                &coord,
                 block,
                 slab_img_buff,
                 data_attrs,
@@ -203,7 +203,7 @@ where
         DataType::UINT32 => {
             let block = n.read_block::<u32>(dataset, data_attrs, coord.clone());
             slab_block_reader::<u32>(
-                coord,
+                &coord,
                 block,
                 slab_img_buff,
                 data_attrs,
@@ -213,7 +213,7 @@ where
         DataType::UINT64 => {
             let block = n.read_block::<u64>(dataset, data_attrs, coord.clone());
             slab_block_reader::<u64>(
-                coord,
+                &coord,
                 block,
                 slab_img_buff,
                 data_attrs,
@@ -225,9 +225,9 @@ where
 }
 
 fn slab_block_reader<T>(
-    coord: Vec<i64>,
+    coord: &[i64],
     block: Result<Option<VecDataBlock<T>>>,
-    slab_img_buff: &Vec<RwLock<Vec<u8>>>,
+    slab_img_buff: &[RwLock<Vec<u8>>],
     data_attrs: &DatasetAttributes,
     slab_min: usize,
     slab_max: usize,

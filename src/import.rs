@@ -84,14 +84,14 @@ impl CommandType for ImportCommand {
         };
         let pbar = RwLock::new(default_progress_bar(files.len() as u64));
 
-        for (slab_coord, slab_files) in files.chunks(slab_size).into_iter().enumerate() {
+        for (slab_coord, slab_files) in files.chunks(slab_size).enumerate() {
             import_slab(
-                n.clone(),
-                dataset.clone(),
+                &n,
+                &dataset,
                 &pool,
-                slab_img_buff.clone(),
+                &slab_img_buff,
                 &slab_files,
-                data_attrs.clone(),
+                &data_attrs,
                 slab_coord)?;
             pbar.write().unwrap().inc(slab_files.len() as u64);
         }
@@ -124,12 +124,12 @@ fn color_to_dtype(color: image::ColorType) -> DataType {
 
 
 fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
-    n: Arc<N5>,
-    dataset: Arc<String>,
+    n: &Arc<N5>,
+    dataset: &Arc<String>,
     pool: &CpuPool,
-    slab_img_buff: Arc<RwLock<Vec<Option<DynamicImage>>>>,
+    slab_img_buff: &Arc<RwLock<Vec<Option<DynamicImage>>>>,
     slab_files: &[PathBuf],
-    data_attrs: Arc<DatasetAttributes>,
+    data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
 ) -> Result<()> {
 
@@ -184,7 +184,7 @@ fn slab_block_dispatch<N5>(
     n: &N5,
     dataset: &str,
     coord: Vec<i64>,
-    slab_img_buff: &Vec<Option<DynamicImage>>,
+    slab_img_buff: &[Option<DynamicImage>],
     data_attrs: &DatasetAttributes,
 ) -> Result<()>
 where
@@ -231,7 +231,7 @@ fn slab_block_writer<N5, T>(
     n: &N5,
     dataset: &str,
     coord: Vec<i64>,
-    slab_img_buff: &Vec<Option<DynamicImage>>,
+    slab_img_buff: &[Option<DynamicImage>],
     data_attrs: &DatasetAttributes,
 ) -> Result<()>
 where
