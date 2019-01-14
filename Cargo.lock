@@ -263,7 +263,7 @@ dependencies = [
 
 [[package]]
 name = "image"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "byteorder 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -273,7 +273,8 @@ dependencies = [
  "num-iter 0.1.37 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-rational 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "png 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "png 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "safe-transmute 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "tiff 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -449,7 +450,7 @@ dependencies = [
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.20 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-cpupool 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "image 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "image 0.21.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "indicatif 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "meval 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -574,7 +575,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "png"
-version = "0.12.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bitflags 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -712,6 +713,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "winapi 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "safe-transmute"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "same-file"
@@ -1021,7 +1027,7 @@ dependencies = [
 "checksum gcc 0.3.54 (registry+https://github.com/rust-lang/crates.io-index)" = "5e33ec290da0d127825013597dbdfc28bee4964690c7ce1166cbc2a7bd08b1bb"
 "checksum getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)" = "b900c08c1939860ce8b54dc6a89e26e00c04c380fd0e09796799bd7f12861e05"
 "checksum gif 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)" = "dd4bca55ac1f213920ce3527ccd62386f1f15fa3f1714aeee1cf93f2c416903f"
-"checksum image 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)" = "60710fd3cb40c2434451d8d5147bcf39bbb68aae0741041133e09439cb2401e3"
+"checksum image 0.21.0 (registry+https://github.com/rust-lang/crates.io-index)" = "52fb0666a1273dac46f9725aa4859bcd5595fc3554cf3495051b4de8db745e7d"
 "checksum indicatif 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a29b2fa6f00010c268bface64c18bb0310aaa70d46a195d5382d288c477fb016"
 "checksum inflate 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "6f53b811ee8e2057ccf9643ca6b4277de90efaf5e61e55fd5254576926bb4245"
 "checksum itertools 0.7.8 (registry+https://github.com/rust-lang/crates.io-index)" = "f58856976b776fedd95533137617a02fb25719f40e7d9b01c7043cd65474f450"
@@ -1054,7 +1060,7 @@ dependencies = [
 "checksum parking_lot 0.5.4 (registry+https://github.com/rust-lang/crates.io-index)" = "9fd9d732f2de194336fb02fe11f9eed13d9e76f13f4315b4d88a14ca411750cd"
 "checksum parking_lot_core 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)" = "538ef00b7317875071d5e00f603f24d16f0b474c1a5fc0ccb8b454ca72eafa79"
 "checksum pkg-config 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)" = "3a8b4c6b8165cd1a1cd4b9b120978131389f64bdaf456435caa41e630edba903"
-"checksum png 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f54b9600d584d3b8a739e1662a595fab051329eff43f20e7d8cc22872962145b"
+"checksum png 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9adebf7fb91ccf5eac9da1a8e00e83cb8ae882c3e8d8e4ad59da73cb8c82a2c9"
 "checksum prettytable-rs 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "0fd04b170004fa2daccf418a7f8253aaf033c27760b5f225889024cf66d7ac2e"
 "checksum proc-macro2 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "cd07deb3c6d1d9ff827999c7f9b04cdfd66b1b17ae508e14fe47b620f2282ae0"
 "checksum proc-macro2 0.4.20 (registry+https://github.com/rust-lang/crates.io-index)" = "3d7b7eaaa90b4a90a932a9ea6666c95a389e424eff347f0f793979289429feee"
@@ -1070,6 +1076,7 @@ dependencies = [
 "checksum regex-syntax 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "b2550876c31dc914696a6c2e01cbce8afba79a93c8ae979d2fe051c0230b3756"
 "checksum regex-syntax 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "747ba3b235651f6e2f67dfa8bcdcd073ddb7c243cb21c442fc12395dfcac212d"
 "checksum remove_dir_all 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "dfc5b3ce5d5ea144bb04ebd093a9e14e9765bcfec866aecda9b6dec43b3d1e24"
+"checksum safe-transmute 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)" = "9604873ffe1980bc1f179103704a65c8aca141c248d9e52b7af95ff10578166e"
 "checksum same-file 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "cfb6eded0b06a0b512c8ddbcf04089138c9b4362c2f696f3c3d76039d68f3637"
 "checksum serde 1.0.79 (registry+https://github.com/rust-lang/crates.io-index)" = "84257ccd054dc351472528c8587b4de2dbf0dc0fe2e634030c1a90bfdacebaa9"
 "checksum serde_derive 1.0.36 (registry+https://github.com/rust-lang/crates.io-index)" = "6fffe22d41dbddcead5b2c380c4714d44f2eb39292f7e7a0d966d2d45bf56408"
