@@ -14,8 +14,6 @@ extern crate prettytable;
 extern crate regex;
 extern crate serde_json;
 extern crate strfmt;
-// This `macro_use` is linted in beta and nightly, but is necessary for stable.
-#[macro_use]
 extern crate structopt;
 
 
