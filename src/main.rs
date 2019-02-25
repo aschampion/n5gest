@@ -193,22 +193,32 @@ fn default_progress_bar(size: u64) -> ProgressBar {
     pbar
 }
 
-
-fn slab_coord_iter(
+fn bounded_slab_coord_iter(
     data_attrs: &DatasetAttributes,
     axis: usize,
     slab_coord: i64,
+    min: &[i64],
+    max: &[i64],
 ) -> (impl Iterator<Item = Vec<i64>>, usize) {
 
-    let mut coord_ceil = data_attrs.get_dimensions().iter()
+    let mut coord_ceil = max.iter()
         .zip(data_attrs.get_block_size().iter())
         .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
         .collect::<Vec<_>>();
     coord_ceil.remove(axis as usize);
-    let total_coords = coord_ceil.iter().product::<i64>() as usize;
+    let mut coord_floor = min.iter()
+        .zip(data_attrs.get_block_size().iter())
+        .map(|(&d, &s)| d / i64::from(s))
+        .collect::<Vec<_>>();
+    coord_floor.remove(axis as usize);
+    let total_coords = coord_floor.iter()
+        .zip(coord_ceil.iter())
+        .map(|(&min, &max)| max - min)
+        .product::<i64>() as usize;
 
     let iter = coord_ceil.into_iter()
-        .map(|c| 0..c)
+        .zip(coord_floor.into_iter())
+        .map(|(c, f)| f..c)
         .multi_cartesian_product()
         .map(move |mut c| {
             c.insert(axis as usize, slab_coord);
@@ -216,6 +226,21 @@ fn slab_coord_iter(
         });
 
     (iter, total_coords)
+}
+
+
+fn slab_coord_iter(
+    data_attrs: &DatasetAttributes,
+    axis: usize,
+    slab_coord: i64,
+) -> (impl Iterator<Item = Vec<i64>>, usize) {
+
+    bounded_slab_coord_iter(
+        data_attrs,
+        axis,
+        slab_coord,
+        &vec![0; data_attrs.get_ndim()],
+        data_attrs.get_dimensions())
 }
 
 

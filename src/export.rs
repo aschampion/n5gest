@@ -14,15 +14,27 @@ pub struct ExportOptions {
     /// Input N5 dataset
     #[structopt(name = "DATASET")]
     dataset: String,
-    /// Minimum Z for export (inclusive)
-    #[structopt(name = "Z_MIN")]
-    z_min: usize,
-    /// Maximum Z for export (exclusive)
-    #[structopt(name = "Z_MAX")]
-    z_max: usize,
     /// Format string for output filename
     #[structopt(name = "FILE_FORMAT")]
     file_format: String,
+    /// Minimum X for export (inclusive)
+    #[structopt(long = "x_min")]
+    x_min: Option<i64>,
+    /// Maximum X for export (exclusive)
+    #[structopt(long = "x_max")]
+    x_max: Option<i64>,
+    /// Minimum Y for export (inclusive)
+    #[structopt(long = "y_min")]
+    y_min: Option<i64>,
+    /// Maximum Y for export (exclusive)
+    #[structopt(long = "y_max")]
+    y_max: Option<i64>,
+    /// Minimum Z for export (inclusive)
+    #[structopt(long = "z_min")]
+    z_min: Option<i64>,
+    /// Maximum Z for export (exclusive)
+    #[structopt(long = "z_max")]
+    z_max: Option<i64>,
 }
 
 pub struct ExportCommand;
@@ -35,21 +47,30 @@ impl CommandType for ExportCommand {
         let started = Instant::now();
 
         let data_attrs = Arc::new(n.get_dataset_attributes(&exp_opt.dataset)?);
-        let slab_size = data_attrs.get_block_size()[2] as usize;
+        let slab_size = i64::from(data_attrs.get_block_size()[2]);
 
-        let slab_min = exp_opt.z_min / slab_size; // Floor
-        let slab_max: usize = exp_opt.z_max / slab_size +
-            usize::from(exp_opt.z_max % slab_size > 0); // Ceiling
+        let min = [
+            exp_opt.x_min.unwrap_or(0),
+            exp_opt.y_min.unwrap_or(0),
+            exp_opt.z_min.unwrap_or(0),
+        ];
+        let max = [
+            exp_opt.x_max.unwrap_or_else(|| data_attrs.get_dimensions()[0]),
+            exp_opt.y_max.unwrap_or_else(|| data_attrs.get_dimensions()[1]),
+            exp_opt.z_max.unwrap_or_else(|| data_attrs.get_dimensions()[2]),
+        ];
 
-        let num_section_el =
-                data_attrs.get_dimensions()[0] as usize *
-                data_attrs.get_dimensions()[1] as usize;
+        let slab_min = min[2] / slab_size; // Floor
+        let slab_max = max[2] / slab_size +
+            i64::from(max[2] % slab_size > 0); // Ceiling
+
+        let num_section_el = ((max[0] - min[0]) * (max[1] - min[1])) as usize;
         let dtype_size = data_attrs.get_data_type().size_of();
 
         let dataset = Arc::new(exp_opt.dataset.clone());
         let file_format = Arc::new(exp_opt.file_format.clone());
 
-        let mut slab_img_buff = Vec::with_capacity(slab_size);
+        let mut slab_img_buff = Vec::with_capacity(slab_size as usize);
         for _ in 0..slab_size {
             slab_img_buff.push(RwLock::new(vec![0; num_section_el * dtype_size]));
         }
@@ -69,15 +90,19 @@ impl CommandType for ExportCommand {
                 &slab_img_buff,
                 &file_format,
                 &data_attrs,
-                slab_coord,
-                exp_opt.z_min,
-                exp_opt.z_max)?;
+                slab_coord as usize,
+                &min,
+                &max)?;
             pbar.write().unwrap().inc(1);
         }
 
         pbar.write().unwrap().finish();
 
-        let num_bytes = data_attrs.get_num_elements() * data_attrs.get_data_type().size_of();
+        let num_bytes = max.iter()
+            .zip(min.iter())
+            .map(|(&ma, &mi)| ma - mi)
+            .product::<i64>() as usize
+            * data_attrs.get_data_type().size_of();
         let elapsed = started.elapsed();
         println!("Wrote {} (uncompressed) in {}",
             HumanBytes(num_bytes as u64),
@@ -110,16 +135,24 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
     file_format: &Arc<String>,
     data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
-    z_min: usize,
-    z_max: usize,
+    min_vox: &[i64; 3],
+    max_vox: &[i64; 3],
 ) -> Result<()> {
 
-    let (slab_coord_iter, total_coords) = slab_coord_iter(&*data_attrs, 2, slab_coord as i64);
+    let (slab_coord_iter, total_coords) = bounded_slab_coord_iter(
+        &*data_attrs, 2, slab_coord as i64,
+        min_vox, max_vox);
     let mut slab_coord_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
 
-    let slab_z = slab_coord * data_attrs.get_block_size()[2] as usize;
-    let slab_min = z_min.checked_sub(slab_z).unwrap_or(0);
-    let slab_max = min(z_max - slab_z, data_attrs.get_block_size()[2] as usize);
+    let slab_z = slab_coord as i64 * i64::from(data_attrs.get_block_size()[2]);
+    let mut slab_min_i = *min_vox;
+    let mut slab_max_i = *max_vox;
+    slab_min_i[2] = std::cmp::max(min_vox[2] - slab_z, 0);
+    // let slab_min = min[2].checked_sub(slab_z).unwrap_or(0);
+    slab_max_i[2] = min(max_vox[2] - slab_z, i64::from(data_attrs.get_block_size()[2]));
+
+    let slab_min = [slab_min_i[0] as usize, slab_min_i[1] as usize, slab_min_i[2] as usize];
+    let slab_max = [slab_max_i[0] as usize, slab_max_i[1] as usize, slab_max_i[2] as usize];
 
     for coord in slab_coord_iter {
         let n = n.clone();
@@ -133,28 +166,31 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
                 coord,
                 &slab_img_buff,
                 &*data_attrs,
-                slab_min,
-                slab_max)
+                &slab_min,
+                &slab_max)
         }));
     }
 
     futures::future::join_all(slab_coord_jobs).wait()?;
 
-    let mut slab_load_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(slab_max - slab_min);
+    let mut slab_load_jobs: Vec<CpuFuture<_, std::io::Error>> =
+        Vec::with_capacity(slab_max[2] - slab_min[2]);
 
-    for slab_ind in slab_min..slab_max {
+    for slab_ind in slab_min[2]..slab_max[2] {
         let data_attrs = data_attrs.clone();
         let slab_img_buff = slab_img_buff.clone();
         let mut params = std::collections::HashMap::new();
-        params.insert("z".into(), slab_z + slab_ind);
+        params.insert("z".into(), slab_z as usize + slab_ind);
         let filename = file_format.format(&params).unwrap();
 
+        let width = (max_vox[0] - min_vox[0]) as u32;
+        let height = (max_vox[1] - min_vox[1]) as u32;
         slab_load_jobs.push(pool.spawn_fn(move || {
             image::save_buffer(
                 filename,
-                &slab_img_buff[slab_ind].read().unwrap(),
-                data_attrs.get_dimensions()[0] as u32,
-                data_attrs.get_dimensions()[1] as u32,
+                &slab_img_buff[slab_ind as usize].read().unwrap(),
+                width,
+                height,
                 dtype_to_color(data_attrs.get_data_type()),
             ).unwrap();
 
@@ -173,8 +209,8 @@ fn slab_block_dispatch<N5>(
     coord: Vec<i64>,
     slab_img_buff: &[RwLock<Vec<u8>>],
     data_attrs: &DatasetAttributes,
-    slab_min: usize,
-    slab_max: usize,
+    slab_min: &[usize; 3],
+    slab_max: &[usize; 3],
 ) -> Result<()>
 where
     N5: N5Reader + Sync + Send + Clone + 'static {
@@ -229,8 +265,8 @@ fn slab_block_reader<T>(
     block: Result<Option<VecDataBlock<T>>>,
     slab_img_buff: &[RwLock<Vec<u8>>],
     data_attrs: &DatasetAttributes,
-    slab_min: usize,
-    slab_max: usize,
+    slab_min: &[usize; 3],
+    slab_max: &[usize; 3],
 ) -> Result<()>
 where
     T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::Zero,
@@ -251,6 +287,24 @@ where
         .collect::<Vec<_>>();
     let dtype_size = data_attrs.get_data_type().size_of();
 
+    let block_min = slab_min.iter()
+        .zip(block_loc.iter())
+        .enumerate()
+        .map(|(i, (&s, &b))| {
+            if i == 2 { s }
+            else {(s).checked_sub(b as usize).unwrap_or(0)}
+        })
+        .collect::<Vec<_>>();
+    let block_max = slab_max.iter()
+        .zip(block_loc.iter())
+        .zip(crop_block_size.iter())
+        .enumerate()
+        .map(|(i, ((&ma, &bl), &cbs))| {
+            if i == 2 { min(ma, cbs as usize) }
+            else {min(ma - bl as usize, cbs as usize)}
+        })
+        .collect::<Vec<_>>();
+
     let byte_data: Vec<u8> = match block? {
         Some(block) => {
             let num_el = block.get_num_elements() as usize;
@@ -266,20 +320,27 @@ where
         },
     };
 
-    let mut data_offset = dtype_size * slab_min *
-        (crop_block_size[0] * crop_block_size[1]) as usize;
-    let row_bytes = (crop_block_size[0] as usize) * dtype_size;
 
-    for z in slab_min..min(slab_max, crop_block_size[2] as usize) {
+    let img_row_vox = slab_max[0] - slab_min[0];
+    let img_row_bytes = img_row_vox * dtype_size;
+    let img_block_row_bytes = (block_max[0] - block_min[0]) * dtype_size;
+    let block_row_bytes = (crop_block_size[0] as usize) * dtype_size;
+
+    for z in block_min[2]..block_max[2] {
+        let mut data_offset = dtype_size * (
+            z * ((crop_block_size[0] * crop_block_size[1]) as usize)
+             + block_min[1] * crop_block_size[0] as usize
+             + block_min[0]);
         let mut offset = dtype_size *
-            (data_attrs.get_dimensions()[0] * block_loc[1] + block_loc[0]) as usize;
+            (img_row_vox * (block_loc[1] as usize + block_min[1]).checked_sub(slab_min[1]).unwrap_or(0) +
+             (block_loc[0] as usize + block_min[0]).checked_sub(slab_min[0]).unwrap_or(0));
 
         let mut img_write = slab_img_buff[z].write().unwrap();
-        for _y in 0..crop_block_size[1] {
-            img_write[offset..(offset + row_bytes)].copy_from_slice(
-                &byte_data[data_offset..(data_offset + row_bytes)]);
-            offset += dtype_size * data_attrs.get_dimensions()[0] as usize;
-            data_offset += row_bytes;
+        for _y in block_min[1]..block_max[1] {
+            img_write[offset..(offset + img_block_row_bytes)].copy_from_slice(
+                &byte_data[data_offset..(data_offset + img_block_row_bytes)]);
+            offset += img_row_bytes;
+            data_offset += block_row_bytes;
         }
     }
 
