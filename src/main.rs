@@ -1,4 +1,6 @@
 #![recursion_limit="256"]
+#![cfg_attr(feature = "nightly", feature(specialization))]
+
 extern crate chrono;
 extern crate futures;
 extern crate futures_cpupool;
@@ -14,6 +16,8 @@ extern crate num_traits;
 extern crate prettytable;
 extern crate regex;
 extern crate serde_json;
+#[cfg(feature = "nightly")]
+extern crate serde_plain;
 extern crate strfmt;
 extern crate structopt;
 
@@ -50,6 +54,8 @@ use structopt::StructOpt;
 
 
 mod bench_read;
+#[cfg(feature = "nightly")]
+mod cast;
 mod crop_blocks;
 mod export;
 mod import;
@@ -84,6 +90,11 @@ enum Command {
     /// Benchmark reading an entire dataset.
     #[structopt(name = "bench-read")]
     BenchRead(bench_read::BenchReadOptions),
+    /// Cast an existing dataset into a new dataset with a given
+    /// data type.
+    #[cfg(feature = "nightly")]
+    #[structopt(name = "cast")]
+    Cast(cast::CastOptions),
     /// Crop wrongly sized blocks to match dataset dimensions at the end of a
     /// given axis.
     #[structopt(name = "crop-blocks")]
@@ -168,6 +179,9 @@ fn main() -> Result<()> {
             stat::StatCommand::run(&opt, st_opt)?,
         Command::BenchRead(ref br_opt) =>
             bench_read::BenchReadCommand::run(&opt, br_opt)?,
+        #[cfg(feature = "nightly")]
+        Command::Cast(ref cast_opt) =>
+            cast::CastCommand::run(&opt, cast_opt).unwrap(),
         Command::CropBlocks(ref crop_opt) =>
             crop_blocks::CropBlocksCommand::run(&opt, crop_opt)?,
         Command::Export(ref exp_opt) =>
