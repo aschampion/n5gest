@@ -46,8 +46,8 @@ impl CommandType for ValidateBlocksCommand {
 
 
 struct InvalidBlocks {
-    errored: Vec<Vec<i64>>,
-    wrongly_sized: Vec<Vec<i64>>,
+    errored: Vec<GridCoord>,
+    wrongly_sized: Vec<GridCoord>,
 }
 
 impl Default for InvalidBlocks {
@@ -61,8 +61,8 @@ impl Default for InvalidBlocks {
 
 enum ValidationResult {
     Ok,
-    Error(Vec<i64>),
-    WrongSize(Vec<i64>),
+    Error(GridCoord),
+    WrongSize(GridCoord),
 }
 
 struct ValidateBlocks;
@@ -76,14 +76,13 @@ impl BlockReaderMapReduce for ValidateBlocks {
         _n: &N5,
         _dataset: &str,
         data_attrs: &DatasetAttributes,
-        coord: Vec<i64>,
+        coord: GridCoord,
         block_opt: Result<Option<VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
             N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
+            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send,
             VecDataBlock<T>: n5::DataBlock<T> {
 
         Ok(match block_opt {

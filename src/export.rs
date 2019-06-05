@@ -2,6 +2,7 @@ use super::*;
 
 use std::cmp::min;
 
+use n5::{data_type_match, data_type_rstype_replace};
 use n5::WriteableDataBlock;
 use strfmt::Format;
 
@@ -163,7 +164,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
             slab_block_dispatch(
                 &*n,
                 &*dataset,
-                coord,
+                coord.into(),
                 &slab_img_buff,
                 &*data_attrs,
                 &slab_min,
@@ -206,7 +207,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
 fn slab_block_dispatch<N5>(
     n: &N5,
     dataset: &str,
-    coord: Vec<i64>,
+    coord: GridCoord,
     slab_img_buff: &[RwLock<Vec<u8>>],
     data_attrs: &DatasetAttributes,
     slab_min: &[usize; 3],
@@ -215,48 +216,18 @@ fn slab_block_dispatch<N5>(
 where
     N5: N5Reader + Sync + Send + Clone + 'static {
 
-    match *data_attrs.get_data_type() {
-        DataType::UINT8 => {
-            let block = n.read_block::<u8>(dataset, data_attrs, coord.clone());
-            slab_block_reader::<u8>(
+    data_type_match! {
+        *data_attrs.get_data_type(),
+        {
+            let block = n.read_block::<RsType>(dataset, data_attrs, coord.clone());
+            slab_block_reader::<RsType>(
                 &coord,
                 block,
                 slab_img_buff,
                 data_attrs,
                 slab_min,
                 slab_max)
-        },
-        DataType::UINT16 => {
-            let block = n.read_block::<u16>(dataset, data_attrs, coord.clone());
-            slab_block_reader::<u16>(
-                &coord,
-                block,
-                slab_img_buff,
-                data_attrs,
-                slab_min,
-                slab_max)
-        },
-        DataType::UINT32 => {
-            let block = n.read_block::<u32>(dataset, data_attrs, coord.clone());
-            slab_block_reader::<u32>(
-                &coord,
-                block,
-                slab_img_buff,
-                data_attrs,
-                slab_min,
-                slab_max)
-        },
-        DataType::UINT64 => {
-            let block = n.read_block::<u64>(dataset, data_attrs, coord.clone());
-            slab_block_reader::<u64>(
-                &coord,
-                block,
-                slab_img_buff,
-                data_attrs,
-                slab_min,
-                slab_max)
-        },
-        _ => unimplemented!(),
+        }
     }
 }
 
@@ -269,8 +240,7 @@ fn slab_block_reader<T>(
     slab_max: &[usize; 3],
 ) -> Result<()>
 where
-    T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::Zero,
-    DataType: TypeReflection<T> + DataBlockCreator<T>,
+    T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::Zero,
     VecDataBlock<T>: n5::DataBlock<T> {
 
     let block_loc = data_attrs.get_block_size().iter().cloned().map(i64::from)

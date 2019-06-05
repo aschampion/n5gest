@@ -67,14 +67,13 @@ impl BlockReaderMapReduce for MapFold {
         _n: &N5,
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
-        _coord: Vec<i64>,
+        _coord: GridCoord,
         block_in: Result<Option<VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
             N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::ToPrimitive,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
+            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::ToPrimitive,
             VecDataBlock<T>: n5::DataBlock<T> {
 
         Ok(block_in?.map(|block| {

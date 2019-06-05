@@ -39,7 +39,7 @@ use indicatif::{
 };
 use itertools::Itertools;
 use n5::prelude::*;
-use n5::DataBlockCreator;
+use n5::{data_type_match, data_type_rstype_replace};
 use num_traits::{
     FromPrimitive,
     ToPrimitive,
@@ -263,7 +263,7 @@ trait BlockReaderMapReduce {
     fn coord_iter(
         data_attrs: &DatasetAttributes,
         _arg: &Self::BlockArgument,
-    ) -> (Box<Iterator<Item = Vec<i64>>>, usize) {
+    ) -> (Box<dyn Iterator<Item = Vec<i64>>>, usize) {
 
         let coord_iter = data_attrs.coord_iter();
         let total_coords = coord_iter.len();
@@ -275,15 +275,14 @@ trait BlockReaderMapReduce {
         n: &N5,
         dataset: &str,
         data_attrs: &DatasetAttributes,
-        coord: Vec<i64>,
+        coord: GridCoord,
         block: Result<Option<VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
             N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send
+            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send
               + num_traits::Zero + num_traits::ToPrimitive,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
             VecDataBlock<T>: n5::DataBlock<T>;
 
     fn reduce(
@@ -296,52 +295,17 @@ trait BlockReaderMapReduce {
         n: &N5,
         dataset: &str,
         data_attrs: &DatasetAttributes,
-        coord: Vec<i64>,
+        coord: GridCoord,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where N5: N5Reader + Sync + Send + Clone + 'static {
 
-        match *data_attrs.get_data_type() {
-            DataType::UINT8 => {
-                let block = n.read_block::<u8>(dataset, data_attrs, coord.clone());
+        data_type_match! {
+            *data_attrs.get_data_type(),
+            {
+                let block = n.read_block::<RsType>(dataset, data_attrs, coord.clone());
                 Self::map(n, dataset, data_attrs, coord, block, arg)
-            },
-            DataType::UINT16 => {
-                let block = n.read_block::<u16>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
-            },
-            DataType::UINT32 => {
-                let block = n.read_block::<u32>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
-            },
-            DataType::UINT64 => {
-                let block = n.read_block::<u64>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
-            },
-            DataType::INT8 => {
-                let block = n.read_block::<i8>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
-            },
-            DataType::INT16 => {
-                let block = n.read_block::<i16>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
-            },
-            DataType::INT32 => {
-                let block = n.read_block::<i32>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
-            },
-            DataType::INT64 => {
-                let block = n.read_block::<i64>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
-            },
-            DataType::FLOAT32 => {
-                let block = n.read_block::<f32>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
-            },
-            DataType::FLOAT64 => {
-                let block = n.read_block::<f64>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
-            },
+            }
         }
     }
 
@@ -389,7 +353,7 @@ trait BlockReaderMapReduce {
 
             all_jobs.push(pool.spawn_fn(move || {
                 let block_result = Self::map_type_dispatch(
-                    &local.n, &local.dataset, &local.data_attrs, coord, &local.arg)?;
+                    &local.n, &local.dataset, &local.data_attrs, coord.into(), &local.arg)?;
                 local.pbar.write().unwrap().inc(1);
                 Ok(block_result)
             }));

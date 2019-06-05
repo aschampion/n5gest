@@ -6,6 +6,8 @@ use image::{
     DynamicImage,
     GenericImageView,
 };
+use n5::{data_type_match, data_type_rstype_replace};
+use n5::smallvec::smallvec;
 
 
 #[derive(StructOpt, Debug)]
@@ -67,7 +69,7 @@ impl CommandType for ImportCommand {
         let dtype = color_to_dtype(ref_img.color());
 
         let data_attrs = Arc::new(DatasetAttributes::new(
-            vec![i64::from(xy_dims.0), i64::from(xy_dims.1), z_dim as i64],
+            smallvec![i64::from(xy_dims.0), i64::from(xy_dims.1), z_dim as i64],
             imp_opt.block_size.0.iter().map(|&b| b as i32).collect(),
             dtype,
             compression));
@@ -169,7 +171,7 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
             slab_block_dispatch(
                 &*n,
                 &*dataset,
-                coord,
+                coord.into(),
                 &slab_read,
                 &*data_attrs)
         }));
@@ -183,67 +185,42 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
 fn slab_block_dispatch<N5>(
     n: &N5,
     dataset: &str,
-    coord: Vec<i64>,
+    coord: GridCoord,
     slab_img_buff: &[Option<DynamicImage>],
     data_attrs: &DatasetAttributes,
 ) -> Result<()>
 where
     N5: N5Writer + Sync + Send + Clone + 'static {
 
-    match *data_attrs.get_data_type() {
-        DataType::UINT8 => {
-            slab_block_writer::<_, u8>(
+    data_type_match! {
+        *data_attrs.get_data_type(),
+        {
+            slab_block_writer::<_, RsType>(
                 n,
                 dataset,
                 coord,
                 slab_img_buff,
                 data_attrs)
-        },
-        DataType::UINT16 => {
-            slab_block_writer::<_, u16>(
-                n,
-                dataset,
-                coord,
-                slab_img_buff,
-                data_attrs)
-        },
-        DataType::UINT32 => {
-            slab_block_writer::<_, u32>(
-                n,
-                dataset,
-                coord,
-                slab_img_buff,
-                data_attrs)
-        },
-        DataType::UINT64 => {
-            slab_block_writer::<_, u64>(
-                n,
-                dataset,
-                coord,
-                slab_img_buff,
-                data_attrs)
-        },
-        _ => unimplemented!(),
+        }
     }
 }
 
 fn slab_block_writer<N5, T>(
     n: &N5,
     dataset: &str,
-    coord: Vec<i64>,
+    coord: GridCoord,
     slab_img_buff: &[Option<DynamicImage>],
     data_attrs: &DatasetAttributes,
 ) -> Result<()>
 where
     N5: N5Writer + Sync + Send + Clone + 'static,
-    T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::Zero,
-    DataType: TypeReflection<T> + DataBlockCreator<T>,
+    T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::Zero,
     VecDataBlock<T>: n5::DataBlock<T> {
 
     let block_loc = data_attrs.get_block_size().iter().cloned().map(i64::from)
         .zip(coord.iter())
         .map(|(s, &i)| i*s)
-        .collect::<Vec<_>>();
+        .collect::<GridCoord>();
     let crop_block_size = data_attrs.get_dimensions().iter()
         .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
         .zip(coord.iter())
@@ -251,7 +228,7 @@ where
             let offset = c * s;
             (std::cmp::min((c + 1) * s, d) - offset) as i32
         })
-        .collect::<Vec<_>>();
+        .collect::<BlockCoord>();
 
     let mut data = Vec::with_capacity(crop_block_size.iter().product::<i32>() as usize);
 
