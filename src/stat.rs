@@ -79,14 +79,13 @@ impl BlockReaderMapReduce for Stat {
         _n: &N5,
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
-        _coord: Vec<i64>,
+        _coord: GridCoord,
         _block_opt: Result<Option<VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
             N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
+            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send,
             VecDataBlock<T>: n5::DataBlock<T> {
 
         unimplemented!()
@@ -134,7 +133,7 @@ impl BlockReaderMapReduce for Stat {
         n: &N5,
         dataset: &str,
         data_attrs: &DatasetAttributes,
-        coord: Vec<i64>,
+        coord: GridCoord,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where N5: N5Reader + Sync + Send + Clone + 'static {

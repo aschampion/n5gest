@@ -81,8 +81,8 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Rec
         where N5: N5Reader + Sync + Send + Clone + 'static {
 
         arg.data_attrs_out = Some(DatasetAttributes::new(
-            data_attrs.get_dimensions().to_vec(),
-            data_attrs.get_block_size().to_vec(),
+            data_attrs.get_dimensions().into(),
+            data_attrs.get_block_size().into(),
             *data_attrs.get_data_type(),
             arg.compression.clone()));
         arg.n5_out.create_dataset(&arg.dataset_out, arg.data_attrs_out.as_ref().unwrap())
@@ -92,14 +92,13 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Rec
         _n: &N5,
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
-        _coord: Vec<i64>,
+        _coord: GridCoord,
         block_opt: Result<Option<VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
             N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
+            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send,
             VecDataBlock<T>: n5::DataBlock<T> {
 
         let num_vox = match block_opt? {

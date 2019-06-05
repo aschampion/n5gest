@@ -1,5 +1,7 @@
 use super::*;
 
+use n5::ndarray::prelude::*;
+
 
 #[derive(StructOpt, Debug)]
 pub struct CropBlocksOptions {
@@ -80,7 +82,7 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
     fn coord_iter(
         data_attrs: &DatasetAttributes,
         arg: &Self::BlockArgument,
-    ) -> (Box<Iterator<Item = Vec<i64>>>, usize) {
+    ) -> (Box<dyn Iterator<Item = Vec<i64>>>, usize) {
 
         let axis = arg.axis;
         let mut coord_ceil = data_attrs.get_dimensions().iter()
@@ -104,14 +106,13 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
         n: &N5,
         dataset: &str,
         data_attrs: &DatasetAttributes,
-        coord: Vec<i64>,
+        coord: GridCoord,
         block_opt: Result<Option<VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
             N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + Clone + PartialEq + Sync + Send + num_traits::Zero,
-            DataType: TypeReflection<T> + DataBlockCreator<T>,
+            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::Zero,
             VecDataBlock<T>: n5::DataBlock<T> {
 
         let num_vox = match block_opt? {
@@ -121,7 +122,7 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
                 // use another means, or crop from this read block directly rather
                 // than re-reading using the ndarray convenience method.
 
-                let (offset, size): (Vec<i64>, Vec<i64>) = data_attrs.get_dimensions().iter()
+                let (offset, size): (GridCoord, GridCoord) = data_attrs.get_dimensions().iter()
                             .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
                             .zip(coord.iter())
                             .map(|((&d, s), &c)| {
