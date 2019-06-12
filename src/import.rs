@@ -18,10 +18,10 @@ pub struct ImportOptions {
     /// Ouput N5 dataset
     #[structopt(name = "DATASET")]
     dataset: String,
-    /// New N5 compression (JSON)
+    /// New N5 compression (JSON), e.g., '{"type": "gzip"}'
     #[structopt(name = "COMPRESSION")]
     compression: String,
-    /// Block size
+    /// Block size, e.g., 128,128,13
     #[structopt(name = "BLOCK_SIZE")]
     block_size: BlockSizeParam,
     /// Files to import, ordered by increasing z

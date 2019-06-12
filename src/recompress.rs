@@ -9,7 +9,7 @@ pub struct RecompressOptions {
     /// Input N5 dataset
     #[structopt(name = "INPUT_DATASET")]
     input_dataset: String,
-    /// New N5 compression (JSON)
+    /// New N5 compression (JSON), e.g., '{"type": "gzip"}'
     #[structopt(name = "COMPRESSION")]
     compression: String,
     /// Output N5 root path
