@@ -107,7 +107,7 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
         dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: GridCoord,
-        block_opt: Result<Option<VecDataBlock<T>>>,
+        block_opt: Result<Option<&VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where

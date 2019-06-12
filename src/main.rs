@@ -1,3 +1,4 @@
+#![recursion_limit="256"]
 extern crate chrono;
 extern crate futures;
 extern crate futures_cpupool;
@@ -276,7 +277,7 @@ trait BlockReaderMapReduce {
         dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: GridCoord,
-        block: Result<Option<VecDataBlock<T>>>,
+        block: Result<Option<&VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
@@ -300,11 +301,33 @@ trait BlockReaderMapReduce {
     ) -> Result<Self::BlockResult>
         where N5: N5Reader + Sync + Send + Clone + 'static {
 
+        use std::cell::RefCell;
         data_type_match! {
             *data_attrs.get_data_type(),
             {
-                let block = n.read_block::<RsType>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
+                thread_local! {
+                    pub static BUFFER: RefCell<Option<VecDataBlock<RsType>>> = RefCell::new(None)
+                };
+                BUFFER.with(|maybe_block| {
+                    match *maybe_block.borrow_mut() {
+                        ref mut m @ None => {
+                            let res_block = n.read_block(dataset, data_attrs, coord.clone());
+                            let pass_block = res_block.map(|maybe_block| {
+                                *m = maybe_block;
+                                m.as_ref()
+                            });
+
+                            Self::map(n, dataset, data_attrs, coord, pass_block, arg)
+                        },
+                        Some(ref mut old_block) => {
+                            let res_present = n.read_block_into(
+                                dataset, data_attrs, coord.clone(), old_block);
+                            let pass_block = res_present.map(|present| present.map(|_| &*old_block));
+
+                            Self::map(n, dataset, data_attrs, coord, pass_block, arg)
+                        }
+                    }
+                })
             }
         }
     }

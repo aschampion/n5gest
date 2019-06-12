@@ -77,7 +77,7 @@ impl BlockReaderMapReduce for ValidateBlocks {
         _dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: GridCoord,
-        block_opt: Result<Option<VecDataBlock<T>>>,
+        block_opt: Result<Option<&VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where

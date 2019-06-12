@@ -93,7 +93,7 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Rec
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
         _coord: GridCoord,
-        block_opt: Result<Option<VecDataBlock<T>>>,
+        block_opt: Result<Option<&VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
@@ -103,7 +103,7 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Rec
 
         let num_vox = match block_opt? {
             Some(block) => {
-                arg.n5_out.write_block(&arg.dataset_out, &arg.data_attrs_out.as_ref().unwrap(), &block)?;
+                arg.n5_out.write_block(&arg.dataset_out, &arg.data_attrs_out.as_ref().unwrap(), block)?;
                 block.get_num_elements() as usize
             },
             None => 0,

@@ -49,7 +49,7 @@ impl BlockReaderMapReduce for BenchRead {
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
         _coord: GridCoord,
-        block_in: Result<Option<VecDataBlock<T>>>,
+        block_in: Result<Option<&VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
