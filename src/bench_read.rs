@@ -49,7 +49,7 @@ impl BlockReaderMapReduce for BenchRead {
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
         _coord: GridCoord,
-        block_in: Result<Option<VecDataBlock<T>>>,
+        block_in: Option<&VecDataBlock<T>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
@@ -57,7 +57,7 @@ impl BlockReaderMapReduce for BenchRead {
             T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send,
             VecDataBlock<T>: n5::DataBlock<T> {
 
-        let num_vox = match block_in? {
+        let num_vox = match block_in {
             Some(block) => {
                 block.get_num_elements() as usize
             },

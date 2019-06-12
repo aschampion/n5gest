@@ -1,3 +1,4 @@
+#![recursion_limit="256"]
 extern crate chrono;
 extern crate futures;
 extern crate futures_cpupool;
@@ -276,7 +277,7 @@ trait BlockReaderMapReduce {
         dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: GridCoord,
-        block: Result<Option<VecDataBlock<T>>>,
+        block: Option<&VecDataBlock<T>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
@@ -300,11 +301,29 @@ trait BlockReaderMapReduce {
     ) -> Result<Self::BlockResult>
         where N5: N5Reader + Sync + Send + Clone + 'static {
 
+        use std::cell::RefCell;
         data_type_match! {
             *data_attrs.get_data_type(),
             {
-                let block = n.read_block::<RsType>(dataset, data_attrs, coord.clone());
-                Self::map(n, dataset, data_attrs, coord, block, arg)
+                thread_local!(pub static FOO: RefCell<Option<VecDataBlock<RsType>>> = RefCell::new(None));
+                FOO.with(|maybe_block| {
+                    match *maybe_block.borrow_mut() {
+                        ref mut m @ None => {
+                            let block = n.read_block::<RsType>(dataset, data_attrs, coord.clone())?;
+                            *m = block;
+                            Self::map(n, dataset, data_attrs, coord, m.as_ref(), arg)
+                        },
+                        Some(ref mut old_block) => {
+                            let present = n.read_block_into::<RsType, VecDataBlock<RsType>>(dataset, data_attrs, coord.clone(), old_block)?;
+                            let block = match present {
+                                None => None,
+                                Some(()) => Some(&*old_block),
+                            };
+
+                            Self::map(n, dataset, data_attrs, coord, block, arg)
+                        }
+                    }
+                })
             }
         }
     }

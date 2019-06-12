@@ -68,7 +68,7 @@ impl BlockReaderMapReduce for MapFold {
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
         _coord: GridCoord,
-        block_in: Result<Option<VecDataBlock<T>>>,
+        block_in: Option<&VecDataBlock<T>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
@@ -76,7 +76,7 @@ impl BlockReaderMapReduce for MapFold {
             T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::ToPrimitive,
             VecDataBlock<T>: n5::DataBlock<T> {
 
-        Ok(block_in?.map(|block| {
+        Ok(block_in.map(|block| {
             let fold_fn = arg.fold_expr.clone().bind2("acc", "x").unwrap();
 
             block.get_data().iter()
