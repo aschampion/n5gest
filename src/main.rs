@@ -158,29 +158,31 @@ impl std::fmt::Display for MetricPrefix {
     }
 }
 
-fn main() {
+fn main() -> Result<()> {
     let opt = Options::from_args();
 
     match opt.command {
         Command::List(ref ls_opt) =>
-            list::ListCommand::run(&opt, ls_opt).unwrap(),
+            list::ListCommand::run(&opt, ls_opt)?,
         Command::Stat(ref st_opt) =>
-            stat::StatCommand::run(&opt, st_opt).unwrap(),
+            stat::StatCommand::run(&opt, st_opt)?,
         Command::BenchRead(ref br_opt) =>
-            bench_read::BenchReadCommand::run(&opt, br_opt).unwrap(),
+            bench_read::BenchReadCommand::run(&opt, br_opt)?,
         Command::CropBlocks(ref crop_opt) =>
-            crop_blocks::CropBlocksCommand::run(&opt, crop_opt).unwrap(),
+            crop_blocks::CropBlocksCommand::run(&opt, crop_opt)?,
         Command::Export(ref exp_opt) =>
-            export::ExportCommand::run(&opt, exp_opt).unwrap(),
+            export::ExportCommand::run(&opt, exp_opt)?,
         Command::Import(ref imp_opt) =>
-            import::ImportCommand::run(&opt, imp_opt).unwrap(),
+            import::ImportCommand::run(&opt, imp_opt)?,
         Command::MapFold(ref mf_opt) =>
-            map_fold::MapFoldCommand::run(&opt, mf_opt).unwrap(),
+            map_fold::MapFoldCommand::run(&opt, mf_opt)?,
         Command::Recompress(ref com_opt) =>
-            recompress::RecompressCommand::run(&opt, com_opt).unwrap(),
+            recompress::RecompressCommand::run(&opt, com_opt)?,
         Command::ValidateBlocks(ref vb_opt) =>
-            validate_blocks::ValidateBlocksCommand::run(&opt, vb_opt).unwrap(),
-    }
+            validate_blocks::ValidateBlocksCommand::run(&opt, vb_opt)?,
+    };
+
+    Ok(())
 }
 
 
