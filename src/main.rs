@@ -277,7 +277,7 @@ trait BlockReaderMapReduce {
         dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: GridCoord,
-        block: Option<&VecDataBlock<T>>,
+        block: Result<Option<&VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
@@ -305,22 +305,23 @@ trait BlockReaderMapReduce {
         data_type_match! {
             *data_attrs.get_data_type(),
             {
-                thread_local!(pub static FOO: RefCell<Option<VecDataBlock<RsType>>> = RefCell::new(None));
-                FOO.with(|maybe_block| {
+                thread_local!(pub static BUFFER: RefCell<Option<VecDataBlock<RsType>>> = RefCell::new(None));
+                BUFFER.with(|maybe_block| {
                     match *maybe_block.borrow_mut() {
                         ref mut m @ None => {
-                            let block = n.read_block::<RsType>(dataset, data_attrs, coord.clone())?;
-                            *m = block;
-                            Self::map(n, dataset, data_attrs, coord, m.as_ref(), arg)
+                            let res_block = n.read_block::<RsType>(dataset, data_attrs, coord.clone());
+                            let pass_block = res_block.map(|maybe_block| {
+                                *m = maybe_block;
+                                m.as_ref()
+                            });
+
+                            Self::map(n, dataset, data_attrs, coord, pass_block, arg)
                         },
                         Some(ref mut old_block) => {
-                            let present = n.read_block_into::<RsType, VecDataBlock<RsType>>(dataset, data_attrs, coord.clone(), old_block)?;
-                            let block = match present {
-                                None => None,
-                                Some(()) => Some(&*old_block),
-                            };
+                            let res_present = n.read_block_into::<RsType, VecDataBlock<RsType>>(dataset, data_attrs, coord.clone(), old_block);
+                            let pass_block = res_present.map(|present| present.map(|_| &*old_block));
 
-                            Self::map(n, dataset, data_attrs, coord, block, arg)
+                            Self::map(n, dataset, data_attrs, coord, pass_block, arg)
                         }
                     }
                 })

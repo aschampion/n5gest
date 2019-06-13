@@ -80,7 +80,7 @@ impl BlockReaderMapReduce for Stat {
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
         _coord: GridCoord,
-        _block_opt: Option<&VecDataBlock<T>>,
+        _block_opt: Result<Option<&VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where

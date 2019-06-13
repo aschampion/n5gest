@@ -107,7 +107,7 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
         dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: GridCoord,
-        block_opt: Option<&VecDataBlock<T>>,
+        block_opt: Result<Option<&VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
@@ -115,7 +115,7 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
             T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::Zero,
             VecDataBlock<T>: n5::DataBlock<T> {
 
-        let num_vox = match block_opt {
+        let num_vox = match block_opt? {
             Some(_) => {
                 // TODO: only reading block because it is the only way currently
                 // to test block existence. To be more efficient could either

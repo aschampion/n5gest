@@ -77,7 +77,7 @@ impl BlockReaderMapReduce for ValidateBlocks {
         _dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: GridCoord,
-        block_opt: Option<&VecDataBlock<T>>,
+        block_opt: Result<Option<&VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
@@ -85,26 +85,24 @@ impl BlockReaderMapReduce for ValidateBlocks {
             T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send,
             VecDataBlock<T>: n5::DataBlock<T> {
 
-        unimplemented!();
+        Ok(match block_opt {
+            Ok(Some(block)) => {
 
-        // Ok(match block_opt {
-        //     Ok(Some(block)) => {
+                let expected_size: Vec<i32> = data_attrs.get_dimensions().iter()
+                    .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
+                    .zip(coord.iter())
+                    .map(|((&d, s), &c)| (std::cmp::min((c + 1) * s, d) - c * s) as i32)
+                    .collect();
 
-        //         let expected_size: Vec<i32> = data_attrs.get_dimensions().iter()
-        //             .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
-        //             .zip(coord.iter())
-        //             .map(|((&d, s), &c)| (std::cmp::min((c + 1) * s, d) - c * s) as i32)
-        //             .collect();
-
-        //         if expected_size == block.get_size() {
-        //             ValidationResult::Ok
-        //         } else {
-        //             ValidationResult::WrongSize(coord)
-        //         }
-        //     },
-        //     Ok(None) => ValidationResult::Ok,
-        //     Err(_) => ValidationResult::Error(coord),
-        // })
+                if expected_size == block.get_size() {
+                    ValidationResult::Ok
+                } else {
+                    ValidationResult::WrongSize(coord)
+                }
+            },
+            Ok(None) => ValidationResult::Ok,
+            Err(_) => ValidationResult::Error(coord),
+        })
     }
 
     fn reduce(
