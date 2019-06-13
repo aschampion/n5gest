@@ -1,6 +1,6 @@
 [package]
 name = "n5gest"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Andrew Champion <andrew.champion@gmail.com>"]
 description = "CLI utilities for N5 files"
 license = "MIT/Apache-2.0"

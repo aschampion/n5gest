@@ -5,9 +5,9 @@ CLI utilities for working with [N5](https://github.com/saalfeldlab/n5) files.
 Written in Rust using the [Rust N5 crate](https://crates.io/crates/n5).
 
 ```console
-$ cargo build --release
-$ target/release/n5gest -h
-n5gest 0.2.0
+$ cargo install n5gest
+$ n5gest -h
+n5gest 0.3.0
 Andrew Champion <andrew.champion@gmail.com>
 Utilities for N5 files.
 
@@ -34,6 +34,15 @@ SUBCOMMANDS:
     recompress         Recompress an existing dataset into a new dataset with a given compression.
     stat               Retrieve metadata about the number of blocks that exists and their timestamps.
     validate-blocks    Report malformed blocks.
+```
+
+Additional subcommands are available when using the `nightly` feature flag:
+
+```sh
+$ cargo +nightly install n5gest --features nightly
+```
+```sh
+    cast               Cast an existing dataset into a new dataset with a given data type.
 ```
 
 ## License
