@@ -117,7 +117,7 @@ impl CommandType for ExportCommand {
 }
 
 
-fn dtype_to_color(dtype: &DataType) -> image::ColorType {
+fn dtype_to_color(dtype: DataType) -> image::ColorType {
     match dtype {
         DataType::UINT8 => image::ColorType::Gray(8),
         DataType::UINT16 => image::ColorType::Gray(16),
@@ -192,7 +192,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
                 &slab_img_buff[slab_ind as usize].read().unwrap(),
                 width,
                 height,
-                dtype_to_color(data_attrs.get_data_type()),
+                dtype_to_color(*data_attrs.get_data_type()),
             ).unwrap();
 
             Ok(())

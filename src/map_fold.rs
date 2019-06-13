@@ -27,7 +27,7 @@ impl CommandType for MapFoldCommand {
 
     fn run(opt: &Options, mf_opt: &Self::Options) -> Result<()> {
         let block_fold_expr: meval::Expr = mf_opt.block_fold_expr.clone()
-            .unwrap_or(mf_opt.fold_expr.clone()).parse().unwrap();
+            .unwrap_or_else(|| mf_opt.fold_expr.clone()).parse().unwrap();
         let fold_expr: meval::Expr = mf_opt.fold_expr.parse().unwrap();
         // let fold_fn = fold_parsed.bind2("acc", "x").unwrap();
         let n = N5Filesystem::open(&mf_opt.n5_path)?;
