@@ -67,10 +67,42 @@ struct RecompressArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
     compression: CompressionType,
 }
 
+impl<N5O: N5Writer + Sync + Send + Clone + 'static, T> BlockTypeMap<T> for Recompress<N5O>
+        where
+            T: DataTypeBounds,
+            VecDataBlock<T>: n5::DataBlock<T> {
+
+    type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
+    type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
+
+    fn map<N5>(
+        _n: &N5,
+        _dataset: &str,
+        _data_attrs: &DatasetAttributes,
+        _coord: GridCoord,
+        block_in: Result<Option<&VecDataBlock<T>>>,
+        arg: &Self::BlockArgument,
+    ) -> Result<Self::BlockResult>
+        where
+            N5: N5Reader + Sync + Send + Clone + 'static {
+
+        let num_vox = match block_in? {
+            Some(block) => {
+                arg.n5_out.write_block(&arg.dataset_out, &arg.data_attrs_out.as_ref().unwrap(), block)?;
+                block.get_num_elements() as usize
+            },
+            None => 0,
+        };
+
+        Ok(num_vox)
+    }
+}
+
 impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Recompress<N5O> {
     type BlockResult = usize;
     type BlockArgument = RecompressArguments<N5O>;
     type ReduceResult = usize;
+    type Map = Self;
 
     fn setup<N5> (
         _n: &N5,
@@ -86,30 +118,6 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Rec
             *data_attrs.get_data_type(),
             arg.compression.clone()));
         arg.n5_out.create_dataset(&arg.dataset_out, arg.data_attrs_out.as_ref().unwrap())
-    }
-
-    fn map<N5, T>(
-        _n: &N5,
-        _dataset: &str,
-        _data_attrs: &DatasetAttributes,
-        _coord: GridCoord,
-        block_opt: Result<Option<&VecDataBlock<T>>>,
-        arg: &Self::BlockArgument,
-    ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send,
-            VecDataBlock<T>: n5::DataBlock<T> {
-
-        let num_vox = match block_opt? {
-            Some(block) => {
-                arg.n5_out.write_block(&arg.dataset_out, &arg.data_attrs_out.as_ref().unwrap(), block)?;
-                block.get_num_elements() as usize
-            },
-            None => 0,
-        };
-
-        Ok(num_vox)
     }
 
     fn reduce(

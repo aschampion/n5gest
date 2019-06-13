@@ -39,12 +39,15 @@ impl CommandType for BenchReadCommand {
 
 struct BenchRead;
 
-impl BlockReaderMapReduce for BenchRead {
-    type BlockResult = usize;
-    type BlockArgument = ();
-    type ReduceResult = usize;
+impl<T> BlockTypeMap<T> for BenchRead
+        where
+            T: DataTypeBounds,
+            VecDataBlock<T>: n5::DataBlock<T> {
 
-    fn map<N5, T>(
+    type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
+    type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
+
+    fn map<N5>(
         _n: &N5,
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
@@ -53,9 +56,7 @@ impl BlockReaderMapReduce for BenchRead {
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send,
-            VecDataBlock<T>: n5::DataBlock<T> {
+            N5: N5Reader + Sync + Send + Clone + 'static {
 
         let num_vox = match block_in? {
             Some(block) => {
@@ -66,6 +67,13 @@ impl BlockReaderMapReduce for BenchRead {
 
         Ok(num_vox)
     }
+}
+
+impl BlockReaderMapReduce for BenchRead {
+    type BlockResult = usize;
+    type BlockArgument = ();
+    type ReduceResult = usize;
+    type Map = Self;
 
     fn reduce(
         data_attrs: &DatasetAttributes,

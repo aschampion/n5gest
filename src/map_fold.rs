@@ -58,12 +58,15 @@ struct MapFoldArgument {
     block_fold_expr: meval::Expr,
 }
 
-impl BlockReaderMapReduce for MapFold {
-    type BlockResult = Option<f64>;
-    type BlockArgument = MapFoldArgument;
-    type ReduceResult = f64;
+impl<T> BlockTypeMap<T> for MapFold
+        where
+            T: DataTypeBounds,
+            VecDataBlock<T>: n5::DataBlock<T> {
 
-    fn map<N5, T>(
+    type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
+    type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
+
+    fn map<N5>(
         _n: &N5,
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
@@ -72,9 +75,7 @@ impl BlockReaderMapReduce for MapFold {
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::ToPrimitive,
-            VecDataBlock<T>: n5::DataBlock<T> {
+            N5: N5Reader + Sync + Send + Clone + 'static {
 
         Ok(block_in?.map(|block| {
             let fold_fn = arg.fold_expr.clone().bind2("acc", "x").unwrap();
@@ -84,6 +85,13 @@ impl BlockReaderMapReduce for MapFold {
                 .fold(arg.initial_val, fold_fn)
         }))
     }
+}
+
+impl BlockReaderMapReduce for MapFold {
+    type BlockResult = Option<f64>;
+    type BlockArgument = MapFoldArgument;
+    type ReduceResult = f64;
+    type Map = Self;
 
     fn reduce(
         _data_attrs: &DatasetAttributes,

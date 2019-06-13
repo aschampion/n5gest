@@ -247,10 +247,84 @@ fn slab_coord_iter(
 }
 
 
+/// Convience trait combined all the required traits on data types until trait
+/// aliases are stabilized.
+trait DataTypeBounds:
+        'static +
+        ReflectedType +
+        Sync + Send +
+        std::fmt::Debug + PartialEq +
+        num_traits::Zero + num_traits::ToPrimitive +
+        {}
+impl<T> DataTypeBounds for T
+where
+    T:
+        'static +
+        ReflectedType +
+        Sync + Send +
+        std::fmt::Debug + PartialEq +
+        num_traits::Zero + num_traits::ToPrimitive +
+        ,
+    VecDataBlock<T>: n5::DataBlock<T> +
+        {}
+
+/// Trait for mapping individual blocks within `BlockReaderMapReduce`.
+/// Factored as a trait rather than a generic method in order to allow
+/// specialization, and potentially reuse.
+trait BlockTypeMap<T>
+        where
+            T: DataTypeBounds,
+            VecDataBlock<T>: n5::DataBlock<T> {
+
+    type BlockResult: Send + 'static;
+    type BlockArgument: Send + Sync + 'static;
+
+    fn map<N5>(
+        n: &N5,
+        dataset: &str,
+        data_attrs: &DatasetAttributes,
+        coord: GridCoord,
+        block: Result<Option<&VecDataBlock<T>>>,
+        arg: &Self::BlockArgument,
+    ) -> Result<Self::BlockResult>
+        where
+            N5: N5Reader + Sync + Send + Clone + 'static,;
+}
+
+trait BlockMap<Res: Send + 'static, Arg: Send + Sync + 'static>:
+        BlockTypeMap<u8, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<u16, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<u32, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<u64, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<i8, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<i16, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<i32, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<i64, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<f32, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<f64, BlockResult=Res, BlockArgument=Arg> +
+{}
+
+impl<Res: Send + 'static, Arg: Send + Sync + 'static, T> BlockMap<Res, Arg> for T
+where T:
+        BlockTypeMap<u8, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<u16, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<u32, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<u64, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<i8, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<i16, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<i32, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<i64, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<f32, BlockResult=Res, BlockArgument=Arg> +
+        BlockTypeMap<f64, BlockResult=Res, BlockArgument=Arg> +
+{}
+
 trait BlockReaderMapReduce {
     type BlockResult: Send + 'static;
     type BlockArgument: Send + Sync + 'static;
     type ReduceResult;
+    // TODO: When associated type default stabilize, `Map` should default to
+    // `Self`.
+    type Map: BlockMap<Self::BlockResult, Self::BlockArgument>;
 
     fn setup<N5> (
         _n: &N5,
@@ -273,20 +347,6 @@ trait BlockReaderMapReduce {
 
         (Box::new(coord_iter), total_coords)
     }
-
-    fn map<N5, T>(
-        n: &N5,
-        dataset: &str,
-        data_attrs: &DatasetAttributes,
-        coord: GridCoord,
-        block: Result<Option<&VecDataBlock<T>>>,
-        arg: &Self::BlockArgument,
-    ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send
-              + num_traits::Zero + num_traits::ToPrimitive,
-            VecDataBlock<T>: n5::DataBlock<T>;
 
     fn reduce(
         data_attrs: &DatasetAttributes,
@@ -319,14 +379,14 @@ trait BlockReaderMapReduce {
                                 m.as_ref()
                             });
 
-                            Self::map(n, dataset, data_attrs, coord, pass_block, arg)
+                            Self::Map::map(n, dataset, data_attrs, coord, pass_block, arg)
                         },
                         Some(ref mut old_block) => {
                             let res_present = n.read_block_into(
                                 dataset, data_attrs, coord.clone(), old_block);
                             let pass_block = res_present.map(|present| present.map(|_| &*old_block));
 
-                            Self::map(n, dataset, data_attrs, coord, pass_block, arg)
+                            Self::Map::map(n, dataset, data_attrs, coord, pass_block, arg)
                         }
                     }
                 })

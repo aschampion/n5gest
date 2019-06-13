@@ -67,25 +67,26 @@ enum ValidationResult {
 
 struct ValidateBlocks;
 
-impl BlockReaderMapReduce for ValidateBlocks {
-    type BlockResult = ValidationResult;
-    type BlockArgument = ();
-    type ReduceResult = InvalidBlocks;
+impl<T> BlockTypeMap<T> for ValidateBlocks
+        where
+            T: DataTypeBounds,
+            VecDataBlock<T>: n5::DataBlock<T> {
 
-    fn map<N5, T>(
+    type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
+    type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
+
+    fn map<N5>(
         _n: &N5,
         _dataset: &str,
         data_attrs: &DatasetAttributes,
         coord: GridCoord,
-        block_opt: Result<Option<&VecDataBlock<T>>>,
+        block_in: Result<Option<&VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send,
-            VecDataBlock<T>: n5::DataBlock<T> {
+            N5: N5Reader + Sync + Send + Clone + 'static {
 
-        Ok(match block_opt {
+        Ok(match block_in {
             Ok(Some(block)) => {
 
                 let expected_size: Vec<i32> = data_attrs.get_dimensions().iter()
@@ -104,6 +105,13 @@ impl BlockReaderMapReduce for ValidateBlocks {
             Err(_) => ValidationResult::Error(coord),
         })
     }
+}
+
+impl BlockReaderMapReduce for ValidateBlocks {
+    type BlockResult = ValidationResult;
+    type BlockArgument = ();
+    type ReduceResult = InvalidBlocks;
+    type Map = Self;
 
     fn reduce(
         _data_attrs: &DatasetAttributes,

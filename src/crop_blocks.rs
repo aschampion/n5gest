@@ -63,46 +63,15 @@ struct CropBlocksArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
     axis: i32,
 }
 
-impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for CropBlocks<N5O> {
-    type BlockResult = Option<usize>;
-    type BlockArgument = CropBlocksArguments<N5O>;
-    type ReduceResult = (usize, usize);
+impl<N5O: N5Writer + Sync + Send + Clone + 'static, T> BlockTypeMap<T> for CropBlocks<N5O>
+        where
+            T: DataTypeBounds,
+            VecDataBlock<T>: n5::DataBlock<T> {
 
-    fn setup<N5> (
-        _n: &N5,
-        dataset: &str,
-        data_attrs: &DatasetAttributes,
-        arg: &mut Self::BlockArgument,
-    ) -> Result<()>
-        where N5: N5Reader + Sync + Send + Clone + 'static {
+    type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
+    type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
 
-        arg.n5_out.create_dataset(dataset, data_attrs)
-    }
-
-    fn coord_iter(
-        data_attrs: &DatasetAttributes,
-        arg: &Self::BlockArgument,
-    ) -> (Box<dyn Iterator<Item = Vec<i64>>>, usize) {
-
-        let axis = arg.axis;
-        let mut coord_ceil = data_attrs.get_dimensions().iter()
-            .zip(data_attrs.get_block_size().iter())
-            .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
-            .collect::<Vec<_>>();
-        let axis_ceil = coord_ceil.remove(axis as usize);
-        let total_coords = coord_ceil.iter().product::<i64>() as usize;
-        let coord_iter = coord_ceil.into_iter()
-            .map(|c| 0..c)
-            .multi_cartesian_product()
-            .map(move |mut c| {
-                c.insert(axis as usize, axis_ceil - 1);
-                c
-            });
-
-        (Box::new(coord_iter), total_coords)
-    }
-
-    fn map<N5, T>(
+    fn map<N5>(
         n: &N5,
         dataset: &str,
         data_attrs: &DatasetAttributes,
@@ -111,9 +80,7 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
         where
-            N5: N5Reader + Sync + Send + Clone + 'static,
-            T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::Zero,
-            VecDataBlock<T>: n5::DataBlock<T> {
+            N5: N5Reader + Sync + Send + Clone + 'static {
 
         let num_vox = match block_opt? {
             Some(_) => {
@@ -151,6 +118,47 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
         };
 
         Ok(num_vox)
+    }
+}
+
+impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for CropBlocks<N5O> {
+    type BlockResult = Option<usize>;
+    type BlockArgument = CropBlocksArguments<N5O>;
+    type ReduceResult = (usize, usize);
+    type Map = Self;
+
+    fn setup<N5> (
+        _n: &N5,
+        dataset: &str,
+        data_attrs: &DatasetAttributes,
+        arg: &mut Self::BlockArgument,
+    ) -> Result<()>
+        where N5: N5Reader + Sync + Send + Clone + 'static {
+
+        arg.n5_out.create_dataset(dataset, data_attrs)
+    }
+
+    fn coord_iter(
+        data_attrs: &DatasetAttributes,
+        arg: &Self::BlockArgument,
+    ) -> (Box<dyn Iterator<Item = Vec<i64>>>, usize) {
+
+        let axis = arg.axis;
+        let mut coord_ceil = data_attrs.get_dimensions().iter()
+            .zip(data_attrs.get_block_size().iter())
+            .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
+            .collect::<Vec<_>>();
+        let axis_ceil = coord_ceil.remove(axis as usize);
+        let total_coords = coord_ceil.iter().product::<i64>() as usize;
+        let coord_iter = coord_ceil.into_iter()
+            .map(|c| 0..c)
+            .multi_cartesian_product()
+            .map(move |mut c| {
+                c.insert(axis as usize, axis_ceil - 1);
+                c
+            });
+
+        (Box::new(coord_iter), total_coords)
     }
 
     fn reduce(
