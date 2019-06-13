@@ -14,8 +14,8 @@ impl CommandType for ListCommand {
     type Options = ListOptions;
 
     fn run(_opt: &Options, ls_opt: &Self::Options) -> Result<()> {
-        let n = N5Filesystem::open(&ls_opt.n5_path).unwrap();
-        let mut group_stack = vec![("".to_owned(), n.list("").unwrap().into_iter())];
+        let n = N5Filesystem::open(&ls_opt.n5_path)?;
+        let mut group_stack = vec![("".to_owned(), n.list("")?.into_iter())];
 
         let mut datasets = vec![];
 
@@ -30,7 +30,7 @@ impl CommandType for ListCommand {
                 if let Ok(ds_attr) = n.get_dataset_attributes(&path) {
                     datasets.push((path, ds_attr));
                 } else {
-                    let next_g_iter = n.list(&path).unwrap().into_iter();
+                    let next_g_iter = n.list(&path)?.into_iter();
                     group_stack.push((path, next_g_iter));
                 }
             }

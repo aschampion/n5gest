@@ -30,7 +30,7 @@ impl CommandType for MapFoldCommand {
             .unwrap_or(mf_opt.fold_expr.clone()).parse().unwrap();
         let fold_expr: meval::Expr = mf_opt.fold_expr.parse().unwrap();
         // let fold_fn = fold_parsed.bind2("acc", "x").unwrap();
-        let n = N5Filesystem::open(&mf_opt.n5_path).unwrap();
+        let n = N5Filesystem::open(&mf_opt.n5_path)?;
 
         let result = MapFold::run(
             &n,
@@ -40,7 +40,7 @@ impl CommandType for MapFoldCommand {
                 initial_val: mf_opt.initial_val,
                 fold_expr,
                 block_fold_expr,
-            }).unwrap();
+            })?;
         println!("{}", result);
 
         Ok(())

@@ -17,13 +17,13 @@ impl CommandType for BenchReadCommand {
     type Options = BenchReadOptions;
 
     fn run(opt: &Options, br_opt: &Self::Options) -> Result<()> {
-        let n = N5Filesystem::open(&br_opt.n5_path).unwrap();
+        let n = N5Filesystem::open(&br_opt.n5_path)?;
         let started = Instant::now();
         let num_bytes = BenchRead::run(
             &n,
             &br_opt.dataset,
             opt.threads,
-            ()).unwrap();
+            ())?;
         let elapsed = started.elapsed();
         println!("Read {} (uncompressed) in {}",
             HumanBytes(num_bytes as u64),

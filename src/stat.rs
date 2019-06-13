@@ -21,12 +21,12 @@ impl CommandType for StatCommand {
     type Options = StatOptions;
 
     fn run(opt: &Options, st_opt: &Self::Options) -> Result<()> {
-        let n = N5Filesystem::open(&st_opt.n5_path).unwrap();
+        let n = N5Filesystem::open(&st_opt.n5_path)?;
         let result = Stat::run(
             &n,
             &st_opt.dataset,
             opt.threads,
-            ()).unwrap();
+            ())?;
 
         if let Some(agg) = result {
             println!("{}/{} blocks exist", agg.occupied, agg.total);

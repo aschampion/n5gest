@@ -26,9 +26,9 @@ impl CommandType for RecompressCommand {
     type Options = RecompressOptions;
 
     fn run(opt: &Options, com_opt: &Self::Options) -> Result<()> {
-        let n5_in = N5Filesystem::open_or_create(&com_opt.input_n5_path).unwrap();
-        let n5_out = N5Filesystem::open_or_create(&com_opt.output_n5_path).unwrap();
-        let compression: CompressionType = serde_json::from_str(&com_opt.compression).unwrap();
+        let n5_in = N5Filesystem::open_or_create(&com_opt.input_n5_path)?;
+        let n5_out = N5Filesystem::open_or_create(&com_opt.output_n5_path)?;
+        let compression: CompressionType = serde_json::from_str(&com_opt.compression)?;
         println!("Recompressing with {}", compression);
 
         let started = Instant::now();
@@ -41,7 +41,7 @@ impl CommandType for RecompressCommand {
                 dataset_out: com_opt.output_dataset.to_owned(),
                 data_attrs_out: None, // TODO: this is a hack.
                 compression,
-            }).unwrap();
+            })?;
         let elapsed = started.elapsed();
         println!("Converted {} (uncompressed) in {}",
             HumanBytes(num_bytes as u64),

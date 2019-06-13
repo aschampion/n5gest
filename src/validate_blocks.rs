@@ -17,23 +17,23 @@ impl CommandType for ValidateBlocksCommand {
     type Options = ValidateBlocksOptions;
 
     fn run(opt: &Options, vb_opt: &Self::Options) -> Result<()> {
-        let n = N5Filesystem::open(&vb_opt.n5_path).unwrap();
+        let n = N5Filesystem::open(&vb_opt.n5_path)?;
         let started = Instant::now();
         let invalid = ValidateBlocks::run(
             &n,
             &vb_opt.dataset,
             opt.threads,
-            ()).unwrap();
+            ())?;
         if !invalid.errored.is_empty() {
             eprintln!("Found {} errored block(s)", invalid.errored.len());
             for block_idx in invalid.errored.iter() {
-                println!("{}", n.get_block_uri(&vb_opt.dataset, block_idx).unwrap());
+                println!("{}", n.get_block_uri(&vb_opt.dataset, block_idx)?);
             }
         }
         if !invalid.wrongly_sized.is_empty() {
             eprintln!("Found {} wrongly sized block(s)", invalid.wrongly_sized.len());
             for block_idx in invalid.wrongly_sized.iter() {
-                println!("{}", n.get_block_uri(&vb_opt.dataset, block_idx).unwrap());
+                println!("{}", n.get_block_uri(&vb_opt.dataset, block_idx)?);
             }
         }
         eprintln!("Found {} invalid block(s) in {}",
