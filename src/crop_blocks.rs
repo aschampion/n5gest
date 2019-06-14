@@ -28,7 +28,7 @@ impl CommandType for CropBlocksCommand {
     type Options = CropBlocksOptions;
 
     fn run(opt: &Options, crop_opt: &Self::Options) -> Result<()> {
-        let n5_in = N5Filesystem::open_or_create(&crop_opt.input_n5_path)?;
+        let n5_in = N5Filesystem::open(&crop_opt.input_n5_path)?;
         let n5_out = N5Filesystem::open_or_create(&crop_opt.output_n5_path)?;
         println!("Cropping along {}", crop_opt.axis);
 
