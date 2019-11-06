@@ -75,7 +75,7 @@ impl CommandType for ExportCommand {
         for _ in 0..slab_size {
             slab_img_buff.push(RwLock::new(vec![0; num_section_el * dtype_size]));
         }
-        let slab_img_buff = Arc::new(slab_img_buff);
+        let slab_img_buff = slab_img_buff.into();
 
         let pool = match opt.threads {
             Some(threads) => CpuPool::new(threads),
@@ -132,7 +132,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
     n: &Arc<N5>,
     dataset: &Arc<String>,
     pool: &CpuPool,
-    slab_img_buff: &Arc<Vec<RwLock<Vec<u8>>>>,
+    slab_img_buff: &Arc<[RwLock<Vec<u8>>]>,
     file_format: &Arc<String>,
     data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
