@@ -187,6 +187,9 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
         let width = (max_vox[0] - min_vox[0]) as u32;
         let height = (max_vox[1] - min_vox[1]) as u32;
         slab_load_jobs.push(pool.spawn_fn(move || {
+            use std::io::Write;
+            let mut f = std::fs::File::create("dump.bin").unwrap();
+            f.write_all(&slab_img_buff[slab_ind as usize].read().unwrap()).unwrap();
             image::save_buffer(
                 filename,
                 &slab_img_buff[slab_ind as usize].read().unwrap(),
