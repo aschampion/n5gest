@@ -262,7 +262,7 @@ where
         .enumerate()
         .map(|(i, (&s, &b))| {
             if i == 2 { s }
-            else {(s).checked_sub(b as usize).unwrap_or(0)}
+            else {(s).saturating_sub(b as usize)}
         })
         .collect::<Vec<_>>();
     let block_max = slab_max.iter()
@@ -302,8 +302,8 @@ where
              + block_min[1] * crop_block_size[0] as usize
              + block_min[0]);
         let mut offset = dtype_size *
-            (img_row_vox * (block_loc[1] as usize + block_min[1]).checked_sub(slab_min[1]).unwrap_or(0) +
-             (block_loc[0] as usize + block_min[0]).checked_sub(slab_min[0]).unwrap_or(0));
+            (img_row_vox * (block_loc[1] as usize + block_min[1]).saturating_sub(slab_min[1]) +
+             (block_loc[0] as usize + block_min[0]).saturating_sub(slab_min[0]));
 
         let mut img_write = slab_img_buff[z].write().unwrap();
         for _y in block_min[1]..block_max[1] {
