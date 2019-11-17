@@ -89,10 +89,10 @@ impl<T> BlockTypeMap<T> for ValidateBlocks
         Ok(match block_in {
             Ok(Some(block)) => {
 
-                let expected_size: Vec<i32> = data_attrs.get_dimensions().iter()
-                    .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
+                let expected_size: Vec<u32> = data_attrs.get_dimensions().iter()
+                    .zip(data_attrs.get_block_size().iter().cloned().map(u64::from))
                     .zip(coord.iter())
-                    .map(|((&d, s), &c)| (std::cmp::min((c + 1) * s, d) - c * s) as i32)
+                    .map(|((&d, s), &c)| (std::cmp::min((c + 1) * s, d) - c * s) as u32)
                     .collect();
 
                 if expected_size == block.get_size() {

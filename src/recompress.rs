@@ -70,7 +70,8 @@ struct RecompressArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
 impl<N5O: N5Writer + Sync + Send + Clone + 'static, T> BlockTypeMap<T> for Recompress<N5O>
         where
             T: DataTypeBounds,
-            VecDataBlock<T>: n5::DataBlock<T> {
+            VecDataBlock<T>: n5::DataBlock<T> +
+                n5::WriteableDataBlock {
 
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;

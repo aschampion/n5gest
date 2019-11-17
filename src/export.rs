@@ -20,22 +20,22 @@ pub struct ExportOptions {
     file_format: String,
     /// Minimum X for export (inclusive)
     #[structopt(long = "x_min")]
-    x_min: Option<i64>,
+    x_min: Option<u64>,
     /// Maximum X for export (exclusive)
     #[structopt(long = "x_max")]
-    x_max: Option<i64>,
+    x_max: Option<u64>,
     /// Minimum Y for export (inclusive)
     #[structopt(long = "y_min")]
-    y_min: Option<i64>,
+    y_min: Option<u64>,
     /// Maximum Y for export (exclusive)
     #[structopt(long = "y_max")]
-    y_max: Option<i64>,
+    y_max: Option<u64>,
     /// Minimum Z for export (inclusive)
     #[structopt(long = "z_min")]
-    z_min: Option<i64>,
+    z_min: Option<u64>,
     /// Maximum Z for export (exclusive)
     #[structopt(long = "z_max")]
-    z_max: Option<i64>,
+    z_max: Option<u64>,
 }
 
 pub struct ExportCommand;
@@ -48,7 +48,7 @@ impl CommandType for ExportCommand {
         let started = Instant::now();
 
         let data_attrs = Arc::new(n.get_dataset_attributes(&exp_opt.dataset)?);
-        let slab_size = i64::from(data_attrs.get_block_size()[2]);
+        let slab_size = u64::from(data_attrs.get_block_size()[2]);
 
         let min = [
             exp_opt.x_min.unwrap_or(0),
@@ -63,7 +63,7 @@ impl CommandType for ExportCommand {
 
         let slab_min = min[2] / slab_size; // Floor
         let slab_max = max[2] / slab_size +
-            i64::from(max[2] % slab_size > 0); // Ceiling
+            u64::from(max[2] % slab_size > 0); // Ceiling
 
         let num_section_el = ((max[0] - min[0]) * (max[1] - min[1])) as usize;
         let dtype_size = data_attrs.get_data_type().size_of();
@@ -102,7 +102,7 @@ impl CommandType for ExportCommand {
         let num_bytes = max.iter()
             .zip(min.iter())
             .map(|(&ma, &mi)| ma - mi)
-            .product::<i64>() as usize
+            .product::<u64>() as usize
             * data_attrs.get_data_type().size_of();
         let elapsed = started.elapsed();
         println!("Wrote {} (uncompressed) in {}",
@@ -136,21 +136,21 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
     file_format: &Arc<String>,
     data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
-    min_vox: &[i64; 3],
-    max_vox: &[i64; 3],
+    min_vox: &[u64; 3],
+    max_vox: &[u64; 3],
 ) -> Result<()> {
 
     let (slab_coord_iter, total_coords) = bounded_slab_coord_iter(
-        &*data_attrs, 2, slab_coord as i64,
+        &*data_attrs, 2, slab_coord as u64,
         min_vox, max_vox);
     let mut slab_coord_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
 
-    let slab_z = slab_coord as i64 * i64::from(data_attrs.get_block_size()[2]);
+    let slab_z = slab_coord as u64 * u64::from(data_attrs.get_block_size()[2]);
     let mut slab_min_i = *min_vox;
     let mut slab_max_i = *max_vox;
     slab_min_i[2] = std::cmp::max(min_vox[2] - slab_z, 0);
     // let slab_min = min[2].checked_sub(slab_z).unwrap_or(0);
-    slab_max_i[2] = min(max_vox[2] - slab_z, i64::from(data_attrs.get_block_size()[2]));
+    slab_max_i[2] = min(max_vox[2] - slab_z, u64::from(data_attrs.get_block_size()[2]));
 
     let slab_min = [slab_min_i[0] as usize, slab_min_i[1] as usize, slab_min_i[2] as usize];
     let slab_max = [slab_max_i[0] as usize, slab_max_i[1] as usize, slab_max_i[2] as usize];
@@ -232,7 +232,7 @@ where
 }
 
 fn slab_block_reader<T>(
-    coord: &[i64],
+    coord: &[u64],
     block: Result<Option<VecDataBlock<T>>>,
     slab_img_buff: &[RwLock<Vec<u8>>],
     data_attrs: &DatasetAttributes,
@@ -241,18 +241,19 @@ fn slab_block_reader<T>(
 ) -> Result<()>
 where
     T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::Zero,
-    VecDataBlock<T>: n5::DataBlock<T> {
+    VecDataBlock<T>: n5::DataBlock<T> +
+        n5::WriteableDataBlock {
 
-    let block_loc = data_attrs.get_block_size().iter().cloned().map(i64::from)
+    let block_loc = data_attrs.get_block_size().iter().cloned().map(u64::from)
         .zip(coord.iter())
         .map(|(s, &i)| i*s)
         .collect::<Vec<_>>();
     let crop_block_size = data_attrs.get_dimensions().iter()
-        .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
+        .zip(data_attrs.get_block_size().iter().cloned().map(u64::from))
         .zip(coord.iter())
         .map(|((&d, s), &c)| {
             let offset = c * s;
-            (std::cmp::min((c + 1) * s, d) - offset) as i32
+            (std::cmp::min((c + 1) * s, d) - offset) as u32
         })
         .collect::<Vec<_>>();
     let dtype_size = data_attrs.get_data_type().size_of();
@@ -285,7 +286,7 @@ where
             byte_data
         },
         None => {
-            let num_el = crop_block_size.iter().product::<i32>() as usize;
+            let num_el = crop_block_size.iter().product::<u32>() as usize;
             vec![0; num_el * dtype_size]
         },
     };

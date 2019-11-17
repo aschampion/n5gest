@@ -213,25 +213,25 @@ fn default_progress_bar(size: u64) -> ProgressBar {
 fn bounded_slab_coord_iter(
     data_attrs: &DatasetAttributes,
     axis: usize,
-    slab_coord: i64,
-    min: &[i64],
-    max: &[i64],
-) -> (impl Iterator<Item = Vec<i64>>, usize) {
+    slab_coord: u64,
+    min: &[u64],
+    max: &[u64],
+) -> (impl Iterator<Item = Vec<u64>>, usize) {
 
     let mut coord_ceil = max.iter()
         .zip(data_attrs.get_block_size().iter())
-        .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
+        .map(|(&d, &s)| (d + u64::from(s) - 1) / u64::from(s))
         .collect::<Vec<_>>();
     coord_ceil.remove(axis as usize);
     let mut coord_floor = min.iter()
         .zip(data_attrs.get_block_size().iter())
-        .map(|(&d, &s)| d / i64::from(s))
+        .map(|(&d, &s)| d / u64::from(s))
         .collect::<Vec<_>>();
     coord_floor.remove(axis as usize);
     let total_coords = coord_floor.iter()
         .zip(coord_ceil.iter())
         .map(|(&min, &max)| max - min)
-        .product::<i64>() as usize;
+        .product::<u64>() as usize;
 
     let iter = coord_ceil.into_iter()
         .zip(coord_floor.into_iter())
@@ -249,8 +249,8 @@ fn bounded_slab_coord_iter(
 fn slab_coord_iter(
     data_attrs: &DatasetAttributes,
     axis: usize,
-    slab_coord: i64,
-) -> (impl Iterator<Item = Vec<i64>>, usize) {
+    slab_coord: u64,
+) -> (impl Iterator<Item = Vec<u64>>, usize) {
 
     bounded_slab_coord_iter(
         data_attrs,
@@ -354,7 +354,7 @@ trait BlockReaderMapReduce {
     fn coord_iter(
         data_attrs: &DatasetAttributes,
         _arg: &Self::BlockArgument,
-    ) -> (Box<dyn Iterator<Item = Vec<i64>>>, usize) {
+    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
 
         let coord_iter = data_attrs.coord_iter();
         let total_coords = coord_iter.len();

@@ -69,8 +69,8 @@ impl CommandType for ImportCommand {
         let dtype = color_to_dtype(ref_img.color());
 
         let data_attrs = Arc::new(DatasetAttributes::new(
-            smallvec![i64::from(xy_dims.0), i64::from(xy_dims.1), z_dim as i64],
-            imp_opt.block_size.0.iter().map(|&b| b as i32).collect(),
+            smallvec![u64::from(xy_dims.0), u64::from(xy_dims.1), z_dim as u64],
+            imp_opt.block_size.0.iter().map(|&b| b as u32).collect(),
             dtype,
             compression));
 
@@ -148,8 +148,8 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
         slab_load_jobs.push(pool.spawn_fn(move || {
             let image = image::open(&owned_file).unwrap();
             assert_eq!(color_to_dtype(image.color()), *data_attrs.get_data_type());
-            assert_eq!(i64::from(image.dimensions().0), data_attrs.get_dimensions()[0]);
-            assert_eq!(i64::from(image.dimensions().1), data_attrs.get_dimensions()[1]);
+            assert_eq!(u64::from(image.dimensions().0), data_attrs.get_dimensions()[0]);
+            assert_eq!(u64::from(image.dimensions().1), data_attrs.get_dimensions()[1]);
             slab_img_buff.write().unwrap()[i] = Some(image);
 
             Ok(())
@@ -158,7 +158,7 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
 
     futures::future::join_all(slab_load_jobs).wait()?;
 
-    let (slab_coord_iter, total_coords) = slab_coord_iter(&*data_attrs, 2, slab_coord as i64);
+    let (slab_coord_iter, total_coords) = slab_coord_iter(&*data_attrs, 2, slab_coord as u64);
     let mut slab_coord_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
 
     for coord in slab_coord_iter {
@@ -217,20 +217,20 @@ where
     T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::Zero,
     VecDataBlock<T>: n5::DataBlock<T> {
 
-    let block_loc = data_attrs.get_block_size().iter().cloned().map(i64::from)
+    let block_loc = data_attrs.get_block_size().iter().cloned().map(u64::from)
         .zip(coord.iter())
         .map(|(s, &i)| i*s)
         .collect::<GridCoord>();
     let crop_block_size = data_attrs.get_dimensions().iter()
-        .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
+        .zip(data_attrs.get_block_size().iter().cloned().map(u64::from))
         .zip(coord.iter())
         .map(|((&d, s), &c)| {
             let offset = c * s;
-            (std::cmp::min((c + 1) * s, d) - offset) as i32
+            (std::cmp::min((c + 1) * s, d) - offset) as u32
         })
         .collect::<BlockCoord>();
 
-    let mut data = Vec::with_capacity(crop_block_size.iter().product::<i32>() as usize);
+    let mut data = Vec::with_capacity(crop_block_size.iter().product::<u32>() as usize);
 
     for img in slab_img_buff {
         let slice = img.as_ref().unwrap().view(

@@ -66,7 +66,10 @@ struct CropBlocksArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
 impl<N5O: N5Writer + Sync + Send + Clone + 'static, T> BlockTypeMap<T> for CropBlocks<N5O>
         where
             T: DataTypeBounds,
-            VecDataBlock<T>: n5::DataBlock<T> {
+            VecDataBlock<T>: n5::DataBlock<T> +
+                n5::ReinitDataBlock<T> +
+                n5::ReadableDataBlock +
+                n5::WriteableDataBlock {
 
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
@@ -90,7 +93,7 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static, T> BlockTypeMap<T> for CropB
                 // than re-reading using the ndarray convenience method.
 
                 let (offset, size): (GridCoord, GridCoord) = data_attrs.get_dimensions().iter()
-                            .zip(data_attrs.get_block_size().iter().cloned().map(i64::from))
+                            .zip(data_attrs.get_block_size().iter().cloned().map(u64::from))
                             .zip(coord.iter())
                             .map(|((&d, s), &c)| {
                                 let offset = c * s;
@@ -108,7 +111,7 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static, T> BlockTypeMap<T> for CropB
                 assert!(!cropped.is_standard_layout(),
                     "Array should still be in f-order");
                 let cropped_block = VecDataBlock::<T>::new(
-                    size.into_iter().map(|n| n as i32).collect(),
+                    size.into_iter().map(|n| n as u32).collect(),
                     coord,
                     cropped.as_slice_memory_order().unwrap().to_owned());
                 arg.n5_out.write_block(dataset, data_attrs, &cropped_block)?;
@@ -141,15 +144,15 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
     fn coord_iter(
         data_attrs: &DatasetAttributes,
         arg: &Self::BlockArgument,
-    ) -> (Box<dyn Iterator<Item = Vec<i64>>>, usize) {
+    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
 
         let axis = arg.axis;
         let mut coord_ceil = data_attrs.get_dimensions().iter()
             .zip(data_attrs.get_block_size().iter())
-            .map(|(&d, &s)| (d + i64::from(s) - 1) / i64::from(s))
+            .map(|(&d, &s)| (d + u64::from(s) - 1) / u64::from(s))
             .collect::<Vec<_>>();
         let axis_ceil = coord_ceil.remove(axis as usize);
-        let total_coords = coord_ceil.iter().product::<i64>() as usize;
+        let total_coords = coord_ceil.iter().product::<u64>() as usize;
         let coord_iter = coord_ceil.into_iter()
             .map(|c| 0..c)
             .multi_cartesian_product()
