@@ -1,25 +1,22 @@
 #![recursion_limit="256"]
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
-extern crate chrono;
-extern crate futures;
-extern crate futures_cpupool;
-extern crate image;
-extern crate indicatif;
-extern crate itertools;
-extern crate meval;
-extern crate n5;
+use chrono;
+use futures;
+use image;
+use meval;
+use n5;
 #[macro_use]
 extern crate num_derive;
-extern crate num_traits;
+use num_traits;
 #[macro_use]
 extern crate prettytable;
-extern crate regex;
-extern crate serde_json;
+use regex;
+use serde_json;
 #[cfg(feature = "nightly")]
 extern crate serde_plain;
-extern crate strfmt;
-extern crate structopt;
+use strfmt;
+use structopt;
 
 
 use std::io::Result;
@@ -154,7 +151,7 @@ impl MetricPrefix {
 }
 
 impl std::fmt::Display for MetricPrefix {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", match self {
             MetricPrefix::None => " ",
             MetricPrefix::Kilo => "K",
