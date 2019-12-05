@@ -38,3 +38,6 @@ version = "0.20"
 # Don't include jpeg_rayon dependency, hdr which includes scoped_threadpool, or ico.
 default-features = false
 features = ["gif_codec", "jpeg", "png_codec", "pnm", "tga", "tiff", "webp", "bmp", "dxt"]
+
+[profile.release]
+lto = true
