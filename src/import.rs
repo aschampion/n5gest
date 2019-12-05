@@ -27,6 +27,9 @@ pub struct ImportOptions {
     /// Files to import, ordered by increasing z
     #[structopt(name = "FILE", parse(from_os_str))]
     files: Vec<PathBuf>,
+    /// Uniform blocks of this value will not be written
+    #[structopt(long = "elide_fill_value")]
+    elide_fill_value: Option<String>,
 }
 
 #[derive(Debug)]
@@ -85,6 +88,7 @@ impl CommandType for ImportCommand {
             None => CpuPool::new_num_cpus(),
         };
         let pbar = RwLock::new(default_progress_bar(files.len() as u64));
+        let elide_fill_value = imp_opt.elide_fill_value.clone().map(Arc::new);
 
         for (slab_coord, slab_files) in files.chunks(slab_size).enumerate() {
             import_slab(
@@ -94,7 +98,8 @@ impl CommandType for ImportCommand {
                 &slab_img_buff,
                 &slab_files,
                 &data_attrs,
-                slab_coord)?;
+                slab_coord,
+                elide_fill_value.clone())?;
             pbar.write().unwrap().inc(slab_files.len() as u64);
         }
 
@@ -133,6 +138,7 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
     slab_files: &[PathBuf],
     data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
+    elide_fill_value: Option<Arc<String>>,
 ) -> Result<()> {
 
     let mut slab_load_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(slab_files.len());
@@ -166,6 +172,7 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
         let dataset = dataset.clone();
         let slab_img_buff = slab_img_buff.clone();
         let data_attrs = data_attrs.clone();
+        let elide_fill_value = elide_fill_value.clone();
         slab_coord_jobs.push(pool.spawn_fn(move || {
             let slab_read = slab_img_buff.read().unwrap();
             slab_block_dispatch(
@@ -173,7 +180,8 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
                 &*dataset,
                 coord.into(),
                 &slab_read,
-                &*data_attrs)
+                &*data_attrs,
+                elide_fill_value,)
         }));
     }
 
@@ -188,6 +196,7 @@ fn slab_block_dispatch<N5>(
     coord: GridCoord,
     slab_img_buff: &[Option<DynamicImage>],
     data_attrs: &DatasetAttributes,
+    elide_fill_value: Option<Arc<String>>,
 ) -> Result<()>
 where
     N5: N5Writer + Sync + Send + Clone + 'static {
@@ -195,12 +204,18 @@ where
     data_type_match! {
         *data_attrs.get_data_type(),
         {
+            let elide_fill_value: Option<RsType> = elide_fill_value.as_ref()
+                .map(|v| v.parse())
+                .transpose()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
             slab_block_writer::<_, RsType>(
                 n,
                 dataset,
                 coord,
                 slab_img_buff,
-                data_attrs)
+                data_attrs,
+                elide_fill_value,
+            )
         }
     }
 }
@@ -211,10 +226,12 @@ fn slab_block_writer<N5, T>(
     coord: GridCoord,
     slab_img_buff: &[Option<DynamicImage>],
     data_attrs: &DatasetAttributes,
+    elide_fill_value: Option<T>,
 ) -> Result<()>
 where
     N5: N5Writer + Sync + Send + Clone + 'static,
-    T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::Zero,
+    T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send
+        + num_traits::Zero + num_traits::AsPrimitive<u8>,
     VecDataBlock<T>: n5::DataBlock<T> {
 
     let block_loc = data_attrs.get_block_size().iter().cloned().map(u64::from)
@@ -240,6 +257,13 @@ where
             crop_block_size[1] as u32);
         for (_, _, pixel) in slice.pixels() {
             data.push(pixel[0]);
+        }
+    }
+
+    if let Some(fill_value) = elide_fill_value {
+        // TODO: bad cast necessary until due to limited DynamicImage type support.
+        if data.iter().all(|&v| v == fill_value.as_()) {
+            return Ok(())
         }
     }
 
