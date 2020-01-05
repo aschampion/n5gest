@@ -124,7 +124,7 @@ impl<N5O, TO, T> BlockTypeMap<T> for Cast<N5O, TO>
             T: DataTypeBounds,
             VecDataBlock<T>: n5::DataBlock<T>,
             TO: DataTypeBounds,
-            VecDataBlock<TO>: n5::DataBlock<TO>,
+            VecDataBlock<TO>: n5::DataBlock<TO> + n5::WriteableDataBlock,
             TO: TryFrom<T>,
             <TO as TryFrom<T>>::Error: std::fmt::Debug {
 
