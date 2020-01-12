@@ -58,7 +58,7 @@ impl CommandType for ImportCommand {
     fn run(opt: &Options, imp_opt: &Self::Options) -> Result<()> {
         let n = Arc::new(N5Filesystem::open_or_create(&imp_opt.n5_path)?);
 
-        if n.exists(&imp_opt.dataset) {
+        if n.exists(&imp_opt.dataset)? {
             return Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists,
                 format!("Dataset {} already exists", imp_opt.dataset)));
         }
