@@ -1,6 +1,8 @@
 use super::*;
 
 use std::cmp::{max, min};
+use std::convert::TryInto;
+use std::time::{Duration, SystemTime};
 
 use chrono::prelude::*;
 
@@ -51,6 +53,13 @@ impl CommandType for StatCommand {
                 DateTime::<Local>::from(agg.max_metadata.accessed),
                 DateTime::<Local>::from(agg.max_metadata.modified),
             ]);
+            let average = agg.sum_metadata.average(agg.total);
+            md_table.add_row(row![
+                "average",
+                DateTime::<Local>::from(average.created),
+                DateTime::<Local>::from(average.accessed),
+                DateTime::<Local>::from(average.modified),
+            ]);
             md_table.printstd();
         } else {
             println!("No occupied blocks found");
@@ -64,8 +73,39 @@ impl CommandType for StatCommand {
 struct AggregateStats {
     max_metadata: DataBlockMetadata,
     min_metadata: DataBlockMetadata,
-    occupied: usize,
-    total: usize,
+    sum_metadata: SumMetadata,
+    occupied: u64,
+    total: u64,
+}
+
+#[derive(Debug, Default)]
+struct SumMetadata {
+    created: Duration,
+    accessed: Duration,
+    modified: Duration,
+}
+
+impl SumMetadata {
+    fn average(&self, total: u64) -> DataBlockMetadata {
+        let total: u32 = total.try_into().unwrap();
+        DataBlockMetadata {
+            created: SystemTime::UNIX_EPOCH + self.created / total,
+            accessed: SystemTime::UNIX_EPOCH + self.accessed / total,
+            modified: SystemTime::UNIX_EPOCH + self.modified / total,
+        }
+    }
+}
+
+impl std::ops::Add<&DataBlockMetadata> for SumMetadata {
+    type Output = SumMetadata;
+
+    fn add(self, other: &DataBlockMetadata) -> SumMetadata {
+        Self {
+            created: self.created + other.created.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
+            accessed: self.accessed + other.accessed.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
+            modified: self.modified + other.modified.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
+        }
+    }
 }
 
 struct Stat;
@@ -105,13 +145,14 @@ impl BlockReaderMapReduce for Stat {
         _arg: &Self::BlockArgument,
     ) -> Self::ReduceResult {
 
-        let total = results.len();
+        let total = results.len().try_into().unwrap();
         let mut results = results.into_iter().filter_map(|b| b);
 
         if let Some(first) = results.next() {
             let stats = AggregateStats {
                 max_metadata: first.clone(),
-                min_metadata: first,
+                min_metadata: first.clone(),
+                sum_metadata: SumMetadata::default() + &first,
                 occupied: 1,
                 total
             };
@@ -128,6 +169,7 @@ impl BlockReaderMapReduce for Stat {
                         accessed: min(stats.min_metadata.accessed, block.accessed),
                         modified: min(stats.min_metadata.modified, block.modified),
                     },
+                    sum_metadata: stats.sum_metadata + &block,
                     occupied: stats.occupied + 1,
                     total
                 }
