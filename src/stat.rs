@@ -53,7 +53,7 @@ impl CommandType for StatCommand {
                 DateTime::<Local>::from(agg.max_metadata.accessed),
                 DateTime::<Local>::from(agg.max_metadata.modified),
             ]);
-            let average = agg.sum_metadata.average(agg.total);
+            let average = agg.sum_metadata.average(agg.occupied);
             md_table.add_row(row![
                 "average",
                 DateTime::<Local>::from(average.created),
