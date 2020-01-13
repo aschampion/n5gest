@@ -33,33 +33,52 @@ impl CommandType for StatCommand {
         if let Some(agg) = result {
             println!("{}/{} blocks exist", agg.occupied, agg.total);
 
+            let prep_date = |date: Option<SystemTime>| date.map(DateTime::<Local>::from)
+                .map(|date| ToString::to_string(&date))
+                .unwrap_or_else(String::new);
+            let prep_size = |size: Option<u64>| size.map(HumanBytes)
+                .map(|size| ToString::to_string(&size))
+                .unwrap_or_else(String::new);
+
             let mut md_table = Table::new();
             md_table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
             md_table.set_titles(row![
                 "",
+                r -> "Size",
                 "Created",
                 "Accessed",
                 "Modified",
             ]);
             md_table.add_row(row![
                 "min",
-                DateTime::<Local>::from(agg.min_metadata.created),
-                DateTime::<Local>::from(agg.min_metadata.accessed),
-                DateTime::<Local>::from(agg.min_metadata.modified),
+                r -> prep_size(agg.min_metadata.size),
+                prep_date(agg.min_metadata.created),
+                prep_date(agg.min_metadata.accessed),
+                prep_date(agg.min_metadata.modified),
             ]);
             md_table.add_row(row![
                 "max",
-                DateTime::<Local>::from(agg.max_metadata.created),
-                DateTime::<Local>::from(agg.max_metadata.accessed),
-                DateTime::<Local>::from(agg.max_metadata.modified),
+                r -> prep_size(agg.max_metadata.size),
+                prep_date(agg.max_metadata.created),
+                prep_date(agg.max_metadata.accessed),
+                prep_date(agg.max_metadata.modified),
             ]);
             let average = agg.sum_metadata.average(agg.occupied);
             md_table.add_row(row![
                 "average",
-                DateTime::<Local>::from(average.created),
-                DateTime::<Local>::from(average.accessed),
-                DateTime::<Local>::from(average.modified),
+                r -> prep_size(average.size),
+                prep_date(average.created),
+                prep_date(average.accessed),
+                prep_date(average.modified),
             ]);
+            md_table.add_row(row![
+                b -> "total",
+                rb -> prep_size(agg.sum_metadata.size),
+                "",
+                "",
+                "",
+            ]);
+
             md_table.printstd();
         } else {
             println!("No occupied blocks found");
@@ -80,19 +99,31 @@ struct AggregateStats {
 
 #[derive(Debug, Default)]
 struct SumMetadata {
-    created: Duration,
-    accessed: Duration,
-    modified: Duration,
+    created: Option<Duration>,
+    accessed: Option<Duration>,
+    modified: Option<Duration>,
+    size: Option<u64>,
 }
 
 impl SumMetadata {
     fn average(&self, total: u64) -> DataBlockMetadata {
-        let total: u32 = total.try_into().unwrap();
+        let total32: u32 = total.try_into().unwrap();
         DataBlockMetadata {
-            created: SystemTime::UNIX_EPOCH + self.created / total,
-            accessed: SystemTime::UNIX_EPOCH + self.accessed / total,
-            modified: SystemTime::UNIX_EPOCH + self.modified / total,
+            created: self.created.map(|d| SystemTime::UNIX_EPOCH + d / total32),
+            accessed: self.accessed.map(|d| SystemTime::UNIX_EPOCH + d / total32),
+            modified: self.modified.map(|d| SystemTime::UNIX_EPOCH + d / total32),
+            size: self.size.map(|s| s / total),
         }
+    }
+}
+
+fn option_fold<U, F>(a: Option<U>, b: Option<U>, f: F) -> Option<U>
+where F: FnOnce(U, U) -> U {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(f(a, b)),
+        (a @ Some(_), None) => a,
+        (None, b @ Some(_)) => b,
+        (None, None) => None,
     }
 }
 
@@ -100,10 +131,16 @@ impl std::ops::Add<&DataBlockMetadata> for SumMetadata {
     type Output = SumMetadata;
 
     fn add(self, other: &DataBlockMetadata) -> SumMetadata {
+        let duration_add = |sd: Option<Duration>, od: Option<SystemTime>| {
+            let od = od.map(|d| d.duration_since(SystemTime::UNIX_EPOCH).unwrap());
+            option_fold(sd, od, |a, b| a + b)
+        };
+
         Self {
-            created: self.created + other.created.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
-            accessed: self.accessed + other.accessed.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
-            modified: self.modified + other.modified.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
+            created: duration_add(self.created, other.created),
+            accessed: duration_add(self.accessed, other.accessed),
+            modified: duration_add(self.modified, other.modified),
+            size: option_fold(self.size, other.size, |a, b| a + b),
         }
     }
 }
@@ -160,14 +197,16 @@ impl BlockReaderMapReduce for Stat {
             Some(results.fold(stats, |stats, block| {
                 AggregateStats {
                     max_metadata: DataBlockMetadata {
-                        created: max(stats.max_metadata.created, block.created),
-                        accessed: max(stats.max_metadata.accessed, block.accessed),
-                        modified: max(stats.max_metadata.modified, block.modified),
+                        created: option_fold(stats.max_metadata.created, block.created, max),
+                        accessed: option_fold(stats.max_metadata.accessed, block.accessed, max),
+                        modified: option_fold(stats.max_metadata.modified, block.modified, max),
+                        size: option_fold(stats.max_metadata.size, block.size, max),
                     },
                     min_metadata: DataBlockMetadata {
-                        created: min(stats.min_metadata.created, block.created),
-                        accessed: min(stats.min_metadata.accessed, block.accessed),
-                        modified: min(stats.min_metadata.modified, block.modified),
+                        created: option_fold(stats.min_metadata.created, block.created, min),
+                        accessed: option_fold(stats.min_metadata.accessed, block.accessed, min),
+                        modified: option_fold(stats.min_metadata.modified, block.modified, min),
+                        size: option_fold(stats.min_metadata.size, block.size, min),
                     },
                     sum_metadata: stats.sum_metadata + &block,
                     occupied: stats.occupied + 1,
