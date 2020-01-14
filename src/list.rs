@@ -52,7 +52,7 @@ impl CommandType for ListCommand {
         ]);
 
         for (path, attr) in datasets {
-            let numel = attr.get_dimensions().iter().map(|&n| n as usize).product();
+            let numel = attr.get_num_elements();
             let (numel, prefix) = MetricPrefix::reduce(numel);
             let numblocks = usize::try_from(attr.get_num_blocks()).unwrap();
             let (numblocks, nb_prefix) = MetricPrefix::reduce(numblocks);
