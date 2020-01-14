@@ -65,11 +65,11 @@ impl CommandType for StatCommand {
                 prep_date(agg.max_metadata.accessed),
                 prep_date(agg.max_metadata.modified),
             ]);
-            let average = agg.sum_metadata.average(agg.occupied);
+            let (average, avg_coord) = agg.sum_metadata.average(agg.occupied);
             md_table.add_row(row![
                 "average",
                 r -> prep_size(average.size),
-                "",
+                r -> format!("{:?}", avg_coord),
                 prep_date(average.created),
                 prep_date(average.accessed),
                 prep_date(average.modified),
@@ -108,18 +108,20 @@ struct SumMetadata {
     created: Option<Duration>,
     accessed: Option<Duration>,
     modified: Option<Duration>,
+    block_coord: GridCoord,
     size: Option<u64>,
 }
 
 impl SumMetadata {
-    fn average(&self, total: u64) -> DataBlockMetadata {
+    fn average(&self, total: u64) -> (DataBlockMetadata, GridCoord) {
         let total32: u32 = total.try_into().unwrap();
-        DataBlockMetadata {
+        (DataBlockMetadata {
             created: self.created.map(|d| SystemTime::UNIX_EPOCH + d / total32),
             accessed: self.accessed.map(|d| SystemTime::UNIX_EPOCH + d / total32),
             modified: self.modified.map(|d| SystemTime::UNIX_EPOCH + d / total32),
             size: self.size.map(|s| s / total),
-        }
+        },
+        self.block_coord.iter().cloned().map(|c| c / total).collect())
     }
 }
 
@@ -133,19 +135,29 @@ where F: FnOnce(U, U) -> U {
     }
 }
 
-impl std::ops::Add<&DataBlockMetadata> for SumMetadata {
+impl std::ops::Add<(GridCoord, &DataBlockMetadata)> for SumMetadata {
     type Output = SumMetadata;
 
-    fn add(self, other: &DataBlockMetadata) -> SumMetadata {
+    fn add(self, tuple: (GridCoord, &DataBlockMetadata)) -> SumMetadata {
+        let (coord, other) = tuple;
         let duration_add = |sd: Option<Duration>, od: Option<SystemTime>| {
             let od = od.map(|d| d.duration_since(SystemTime::UNIX_EPOCH).unwrap());
             option_fold(sd, od, |a, b| a + b)
+        };
+
+        let block_coord = if self.block_coord.len() != coord.len() {
+            // Has not yet be initialized.
+            coord
+        } else {
+            self.block_coord.iter()
+                .zip(coord.iter()).map(|(&a, &b)| a + b).collect()
         };
 
         Self {
             created: duration_add(self.created, other.created),
             accessed: duration_add(self.accessed, other.accessed),
             modified: duration_add(self.modified, other.modified),
+            block_coord,
             size: option_fold(self.size, other.size, |a, b| a + b),
         }
     }
@@ -195,7 +207,7 @@ impl BlockReaderMapReduce for Stat {
             let stats = AggregateStats {
                 max_metadata: first.clone(),
                 min_metadata: first.clone(),
-                sum_metadata: SumMetadata::default() + &first,
+                sum_metadata: SumMetadata::default() + (coord.clone(), &first),
                 min_block_coord: coord.clone(),
                 max_block_coord: coord,
                 occupied: 1,
@@ -220,7 +232,7 @@ impl BlockReaderMapReduce for Stat {
                         .zip(coord.iter()).map(|(&a, &b)| min(a, b)).collect(),
                     max_block_coord: stats.min_block_coord.iter()
                         .zip(coord.iter()).map(|(&a, &b)| max(a, b)).collect(),
-                    sum_metadata: stats.sum_metadata + &block,
+                    sum_metadata: stats.sum_metadata + (coord, &block),
                     occupied: stats.occupied + 1,
                     total
                 }
