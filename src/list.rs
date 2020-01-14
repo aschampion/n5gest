@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use super::*;
 
 
@@ -43,6 +45,8 @@ impl CommandType for ListCommand {
             r -> "Dims",
             r -> "Max vox",
             r -> "Block",
+            r -> "Grid dims",
+            r -> "Max blocks",
             "Dtype",
             "Compression",
         ]);
@@ -50,11 +54,15 @@ impl CommandType for ListCommand {
         for (path, attr) in datasets {
             let numel = attr.get_dimensions().iter().map(|&n| n as usize).product();
             let (numel, prefix) = MetricPrefix::reduce(numel);
+            let numblocks = usize::try_from(attr.get_num_blocks()).unwrap();
+            let (numblocks, nb_prefix) = MetricPrefix::reduce(numblocks);
             table.add_row(row![
                 b -> path,
                 r -> format!("{:?}", attr.get_dimensions()),
                 r -> format!("{} {}", numel, prefix),
                 r -> format!("{:?}", attr.get_block_size()),
+                r -> format!("{:?}", attr.get_grid_extent()),
+                r -> format!("{} {}", numblocks, nb_prefix),
                 format!("{:?}", attr.get_data_type()),
                 attr.get_compression(),
             ]);
