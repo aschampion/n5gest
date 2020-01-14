@@ -31,7 +31,6 @@ impl CommandType for StatCommand {
             ())?;
 
         if let Some(agg) = result {
-            println!("{}/{} blocks exist", agg.occupied, agg.total);
 
             let prep_date = |date: Option<SystemTime>| date.map(DateTime::<Local>::from)
                 .map(|date| ToString::to_string(&date))
@@ -45,6 +44,7 @@ impl CommandType for StatCommand {
             md_table.set_titles(row![
                 "",
                 r -> "Size",
+                r -> "GridCoord",
                 "Created",
                 "Accessed",
                 "Modified",
@@ -52,6 +52,7 @@ impl CommandType for StatCommand {
             md_table.add_row(row![
                 "min",
                 r -> prep_size(agg.min_metadata.size),
+                r -> format!("{:?}", agg.min_block_coord),
                 prep_date(agg.min_metadata.created),
                 prep_date(agg.min_metadata.accessed),
                 prep_date(agg.min_metadata.modified),
@@ -59,6 +60,7 @@ impl CommandType for StatCommand {
             md_table.add_row(row![
                 "max",
                 r -> prep_size(agg.max_metadata.size),
+                r -> format!("{:?}", agg.max_block_coord),
                 prep_date(agg.max_metadata.created),
                 prep_date(agg.max_metadata.accessed),
                 prep_date(agg.max_metadata.modified),
@@ -67,6 +69,7 @@ impl CommandType for StatCommand {
             md_table.add_row(row![
                 "average",
                 r -> prep_size(average.size),
+                "",
                 prep_date(average.created),
                 prep_date(average.accessed),
                 prep_date(average.modified),
@@ -74,6 +77,7 @@ impl CommandType for StatCommand {
             md_table.add_row(row![
                 b -> "total",
                 rb -> prep_size(agg.sum_metadata.size),
+                rb -> format!("{}/{}", agg.occupied, agg.total),
                 "",
                 "",
                 "",
@@ -93,6 +97,8 @@ struct AggregateStats {
     max_metadata: DataBlockMetadata,
     min_metadata: DataBlockMetadata,
     sum_metadata: SumMetadata,
+    min_block_coord: GridCoord,
+    max_block_coord: GridCoord,
     occupied: u64,
     total: u64,
 }
@@ -171,7 +177,7 @@ impl<T> BlockTypeMap<T> for Stat
 }
 
 impl BlockReaderMapReduce for Stat {
-    type BlockResult = Option<DataBlockMetadata>;
+    type BlockResult = Option<(GridCoord, DataBlockMetadata)>;
     type BlockArgument = ();
     type ReduceResult = Option<AggregateStats>;
     type Map = Self;
@@ -185,16 +191,18 @@ impl BlockReaderMapReduce for Stat {
         let total = results.len().try_into().unwrap();
         let mut results = results.into_iter().filter_map(|b| b);
 
-        if let Some(first) = results.next() {
+        if let Some((coord, first)) = results.next() {
             let stats = AggregateStats {
                 max_metadata: first.clone(),
                 min_metadata: first.clone(),
                 sum_metadata: SumMetadata::default() + &first,
+                min_block_coord: coord.clone(),
+                max_block_coord: coord,
                 occupied: 1,
                 total
             };
 
-            Some(results.fold(stats, |stats, block| {
+            Some(results.fold(stats, |stats, (coord, block)| {
                 AggregateStats {
                     max_metadata: DataBlockMetadata {
                         created: option_fold(stats.max_metadata.created, block.created, max),
@@ -208,6 +216,10 @@ impl BlockReaderMapReduce for Stat {
                         modified: option_fold(stats.min_metadata.modified, block.modified, min),
                         size: option_fold(stats.min_metadata.size, block.size, min),
                     },
+                    min_block_coord: stats.min_block_coord.iter()
+                        .zip(coord.iter()).map(|(&a, &b)| min(a, b)).collect(),
+                    max_block_coord: stats.min_block_coord.iter()
+                        .zip(coord.iter()).map(|(&a, &b)| max(a, b)).collect(),
                     sum_metadata: stats.sum_metadata + &block,
                     occupied: stats.occupied + 1,
                     total
@@ -228,5 +240,6 @@ impl BlockReaderMapReduce for Stat {
         where N5: N5Reader + Sync + Send + Clone + 'static {
 
         n.block_metadata(dataset, data_attrs, &coord)
+            .map(|maybe_meta| maybe_meta.map(|meta| (coord, meta)))
     }
 }
