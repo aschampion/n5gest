@@ -25,6 +25,8 @@ OPTIONS:
 SUBCOMMANDS:
     bench-read         Benchmark reading an entire dataset.
     crop-blocks        Crop wrongly sized blocks to match dataset dimensions at the end of a given axis.
+    delete-uniform-blocks
+                       Delete blocks uniformly filled with a given value, such as empty blocks.
     export             Export a sequence of image files from a series of z-sections.
     help               Prints this message or the help of the given subcommand(s)
     import             Import a sequence of image files as a series of z-sections into a 3D N5 dataset.

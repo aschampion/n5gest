@@ -54,6 +54,7 @@ mod bench_read;
 #[cfg(feature = "nightly")]
 mod cast;
 mod crop_blocks;
+mod delete_uniform_blocks;
 mod export;
 mod import;
 mod list;
@@ -96,6 +97,9 @@ enum Command {
     /// given axis.
     #[structopt(name = "crop-blocks")]
     CropBlocks(crop_blocks::CropBlocksOptions),
+    /// Delete blocks uniformly filled with a given value, such as empty blocks.
+    #[structopt(name = "delete-uniform-blocks")]
+    DeleteUniformBlocks(delete_uniform_blocks::DeleteUniformBlocksOptions),
     /// Export a sequence of image files from a series of z-sections.
     #[structopt(name = "export")]
     Export(export::ExportOptions),
@@ -181,6 +185,8 @@ fn main() -> Result<()> {
             cast::CastCommand::run(&opt, cast_opt).unwrap(),
         Command::CropBlocks(ref crop_opt) =>
             crop_blocks::CropBlocksCommand::run(&opt, crop_opt)?,
+        Command::DeleteUniformBlocks(ref dub_opt) =>
+            delete_uniform_blocks::DeleteUniformBlocksCommand::run(&opt, dub_opt)?,
         Command::Export(ref exp_opt) =>
             export::ExportCommand::run(&opt, exp_opt)?,
         Command::Import(ref imp_opt) =>
