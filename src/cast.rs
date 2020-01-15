@@ -96,9 +96,8 @@ impl<N5O, TO, T> BlockTypeMap<T> for Cast<N5O, TO>
         where
             N5O: N5Writer + Sync + Send + Clone + 'static,
             T: DataTypeBounds,
-            VecDataBlock<T>: n5::DataBlock<T>,
             TO: DataTypeBounds,
-            VecDataBlock<TO>: n5::DataBlock<TO>, {
+{
 
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
@@ -122,9 +121,8 @@ impl<N5O, TO, T> BlockTypeMap<T> for Cast<N5O, TO>
         where
             N5O: N5Writer + Sync + Send + Clone + 'static,
             T: DataTypeBounds,
-            VecDataBlock<T>: n5::DataBlock<T>,
             TO: DataTypeBounds,
-            VecDataBlock<TO>: n5::DataBlock<TO> + n5::WriteableDataBlock,
+            VecDataBlock<TO>: n5::WriteableDataBlock,
             TO: TryFrom<T>,
             <TO as TryFrom<T>>::Error: std::fmt::Debug {
 
@@ -167,7 +165,6 @@ impl<N5O, TO> BlockReaderMapReduce for Cast<N5O, TO>
         where
             N5O: N5Writer + Sync + Send + Clone + 'static,
             TO: DataTypeBounds,
-            VecDataBlock<TO>: n5::DataBlock<TO>,
 {
     type BlockResult = usize;
     type BlockArgument = CastArguments<N5O>;

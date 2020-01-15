@@ -230,9 +230,8 @@ fn slab_block_writer<N5, T>(
 ) -> Result<()>
 where
     N5: N5Writer + Sync + Send + Clone + 'static,
-    T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send
-        + num_traits::Zero + num_traits::AsPrimitive<u8>,
-    VecDataBlock<T>: n5::DataBlock<T> {
+    T: DataTypeBounds + num_traits::AsPrimitive<u8>,
+{
 
     let block_loc = data_attrs.get_block_size().iter().cloned().map(u64::from)
         .zip(coord.iter())

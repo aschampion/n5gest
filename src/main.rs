@@ -288,10 +288,7 @@ where
 /// Trait for mapping individual blocks within `BlockReaderMapReduce`.
 /// Factored as a trait rather than a generic method in order to allow
 /// specialization, and potentially reuse.
-trait BlockTypeMap<T>
-        where
-            T: DataTypeBounds,
-            VecDataBlock<T>: n5::DataBlock<T> {
+trait BlockTypeMap<T> where T: DataTypeBounds {
 
     type BlockResult: Send + 'static;
     type BlockArgument: Send + Sync + 'static;

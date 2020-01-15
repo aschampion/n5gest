@@ -240,9 +240,9 @@ fn slab_block_reader<T>(
     slab_max: &[usize; 3],
 ) -> Result<()>
 where
-    T: 'static + std::fmt::Debug + ReflectedType + PartialEq + Sync + Send + num_traits::Zero,
-    VecDataBlock<T>: n5::DataBlock<T> +
-        n5::WriteableDataBlock {
+    T: DataTypeBounds,
+    VecDataBlock<T>: n5::WriteableDataBlock,
+{
 
     let block_loc = data_attrs.get_block_size().iter().cloned().map(u64::from)
         .zip(coord.iter())

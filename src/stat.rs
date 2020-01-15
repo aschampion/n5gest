@@ -168,7 +168,7 @@ struct Stat;
 impl<T> BlockTypeMap<T> for Stat
         where
             T: DataTypeBounds,
-            VecDataBlock<T>: n5::DataBlock<T> {
+{
 
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;

@@ -70,7 +70,7 @@ struct ValidateBlocks;
 impl<T> BlockTypeMap<T> for ValidateBlocks
         where
             T: DataTypeBounds,
-            VecDataBlock<T>: n5::DataBlock<T> {
+{
 
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;

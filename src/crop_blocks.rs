@@ -66,7 +66,7 @@ struct CropBlocksArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
 impl<N5O: N5Writer + Sync + Send + Clone + 'static, T> BlockTypeMap<T> for CropBlocks<N5O>
         where
             T: DataTypeBounds,
-            VecDataBlock<T>: n5::DataBlock<T> +
+            VecDataBlock<T>:
                 n5::ReinitDataBlock<T> +
                 n5::ReadableDataBlock +
                 n5::WriteableDataBlock {

@@ -85,7 +85,7 @@ impl<N5O, T> BlockTypeMap<T> for DeleteUniformBlocks<N5O>
         where
             N5O: N5Writer + Sync + Send + Clone + 'static,
             T: DataTypeBounds,
-            VecDataBlock<T>: n5::DataBlock<T>, {
+{
 
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
