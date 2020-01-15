@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[derive(StructOpt, Debug)]
 pub struct BenchReadOptions {
     /// Input N5 root path
@@ -19,31 +18,27 @@ impl CommandType for BenchReadCommand {
     fn run(opt: &Options, br_opt: &Self::Options) -> Result<()> {
         let n = N5Filesystem::open(&br_opt.n5_path)?;
         let started = Instant::now();
-        let num_bytes = BenchRead::run(
-            &n,
-            &br_opt.dataset,
-            opt.threads,
-            ())?;
+        let num_bytes = BenchRead::run(&n, &br_opt.dataset, opt.threads, ())?;
         let elapsed = started.elapsed();
-        println!("Read {} (uncompressed) in {}",
+        println!(
+            "Read {} (uncompressed) in {}",
             HumanBytes(num_bytes as u64),
-            HumanDuration(elapsed));
-        let throughput = 1e9 * (num_bytes as f64) /
-            (1e9 * (elapsed.as_secs() as f64) + f64::from(elapsed.subsec_nanos()));
+            HumanDuration(elapsed)
+        );
+        let throughput = 1e9 * (num_bytes as f64)
+            / (1e9 * (elapsed.as_secs() as f64) + f64::from(elapsed.subsec_nanos()));
         println!("({} / s)", HumanBytes(throughput as u64));
 
         Ok(())
     }
 }
 
-
 struct BenchRead;
 
 impl<T> BlockTypeMap<T> for BenchRead
-        where
-            T: DataTypeBounds,
+where
+    T: DataTypeBounds,
 {
-
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
 
@@ -55,13 +50,11 @@ impl<T> BlockTypeMap<T> for BenchRead
         block_in: Result<Option<&VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         let num_vox = match block_in? {
-            Some(block) => {
-                block.get_num_elements() as usize
-            },
+            Some(block) => block.get_num_elements() as usize,
             None => 0,
         };
 
@@ -80,7 +73,6 @@ impl BlockReaderMapReduce for BenchRead {
         results: Vec<Self::BlockResult>,
         _arg: &Self::BlockArgument,
     ) -> Self::ReduceResult {
-
         let num_vox: usize = results.iter().sum();
 
         num_vox * data_attrs.get_data_type().size_of()

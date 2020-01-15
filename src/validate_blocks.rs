@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[derive(StructOpt, Debug)]
 pub struct ValidateBlocksOptions {
     /// Input N5 root path
@@ -19,11 +18,7 @@ impl CommandType for ValidateBlocksCommand {
     fn run(opt: &Options, vb_opt: &Self::Options) -> Result<()> {
         let n = N5Filesystem::open(&vb_opt.n5_path)?;
         let started = Instant::now();
-        let invalid = ValidateBlocks::run(
-            &n,
-            &vb_opt.dataset,
-            opt.threads,
-            ())?;
+        let invalid = ValidateBlocks::run(&n, &vb_opt.dataset, opt.threads, ())?;
         if !invalid.errored.is_empty() {
             eprintln!("Found {} errored block(s)", invalid.errored.len());
             for block_idx in invalid.errored.iter() {
@@ -31,19 +26,23 @@ impl CommandType for ValidateBlocksCommand {
             }
         }
         if !invalid.wrongly_sized.is_empty() {
-            eprintln!("Found {} wrongly sized block(s)", invalid.wrongly_sized.len());
+            eprintln!(
+                "Found {} wrongly sized block(s)",
+                invalid.wrongly_sized.len()
+            );
             for block_idx in invalid.wrongly_sized.iter() {
                 println!("{}", n.get_block_uri(&vb_opt.dataset, block_idx)?);
             }
         }
-        eprintln!("Found {} invalid block(s) in {}",
+        eprintln!(
+            "Found {} invalid block(s) in {}",
             invalid.errored.len() + invalid.wrongly_sized.len(),
-            HumanDuration(started.elapsed()));
+            HumanDuration(started.elapsed())
+        );
 
         Ok(())
     }
 }
-
 
 struct InvalidBlocks {
     errored: Vec<GridCoord>,
@@ -68,10 +67,9 @@ enum ValidationResult {
 struct ValidateBlocks;
 
 impl<T> BlockTypeMap<T> for ValidateBlocks
-        where
-            T: DataTypeBounds,
+where
+    T: DataTypeBounds,
 {
-
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
 
@@ -83,13 +81,14 @@ impl<T> BlockTypeMap<T> for ValidateBlocks
         block_in: Result<Option<&VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         Ok(match block_in {
             Ok(Some(block)) => {
-
-                let expected_size: Vec<u32> = data_attrs.get_dimensions().iter()
+                let expected_size: Vec<u32> = data_attrs
+                    .get_dimensions()
+                    .iter()
                     .zip(data_attrs.get_block_size().iter().cloned().map(u64::from))
                     .zip(coord.iter())
                     .map(|((&d, s), &c)| (std::cmp::min((c + 1) * s, d) - c * s) as u32)
@@ -100,7 +99,7 @@ impl<T> BlockTypeMap<T> for ValidateBlocks
                 } else {
                     ValidationResult::WrongSize(coord)
                 }
-            },
+            }
             Ok(None) => ValidationResult::Ok,
             Err(_) => ValidationResult::Error(coord),
         })
@@ -118,12 +117,11 @@ impl BlockReaderMapReduce for ValidateBlocks {
         results: Vec<Self::BlockResult>,
         _arg: &Self::BlockArgument,
     ) -> Self::ReduceResult {
-
         let mut invalid = InvalidBlocks::default();
 
         for result in results.into_iter() {
             match result {
-                ValidationResult::Ok => {},
+                ValidationResult::Ok => {}
                 ValidationResult::Error(v) => invalid.errored.push(v),
                 ValidationResult::WrongSize(v) => invalid.wrongly_sized.push(v),
             }

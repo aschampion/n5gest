@@ -1,4 +1,4 @@
-#![recursion_limit="256"]
+#![recursion_limit = "256"]
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
 use chrono;
@@ -17,7 +17,6 @@ use serde_json;
 extern crate serde_plain;
 use strfmt;
 use structopt;
-
 
 use std::io::Result;
 use std::path::PathBuf;
@@ -41,14 +40,16 @@ use indicatif::{
 };
 use itertools::Itertools;
 use n5::prelude::*;
-use n5::{data_type_match, data_type_rstype_replace};
+use n5::{
+    data_type_match,
+    data_type_rstype_replace,
+};
 use num_traits::{
     FromPrimitive,
     ToPrimitive,
 };
 use prettytable::Table;
 use structopt::StructOpt;
-
 
 mod bench_read;
 #[cfg(feature = "nightly")]
@@ -62,7 +63,6 @@ mod map_fold;
 mod recompress;
 mod stat;
 mod validate_blocks;
-
 
 /// Utilities for N5 files.
 #[derive(StructOpt, Debug)]
@@ -156,23 +156,28 @@ impl MetricPrefix {
 
 impl std::fmt::Display for MetricPrefix {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            MetricPrefix::None => " ",
-            MetricPrefix::Kilo => "K",
-            MetricPrefix::Mega => "M",
-            MetricPrefix::Giga => "G",
-            MetricPrefix::Tera => "T",
-            MetricPrefix::Peta => "P",
-            MetricPrefix::Exa => "E",
-            MetricPrefix::Zetta => "Z",
-            MetricPrefix::Yotta => "Y",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                MetricPrefix::None => " ",
+                MetricPrefix::Kilo => "K",
+                MetricPrefix::Mega => "M",
+                MetricPrefix::Giga => "G",
+                MetricPrefix::Tera => "T",
+                MetricPrefix::Peta => "P",
+                MetricPrefix::Exa => "E",
+                MetricPrefix::Zetta => "Z",
+                MetricPrefix::Yotta => "Y",
+            }
+        )
     }
 }
 
 fn main() -> Result<()> {
     let opt = Options::from_args();
 
+    #[rustfmt::skip]
     match opt.command {
         Command::List(ref ls_opt) =>
             list::ListCommand::run(&opt, ls_opt)?,
@@ -202,13 +207,13 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-
 fn default_progress_bar(size: u64) -> ProgressBar {
     let pbar = ProgressBar::new(size);
     pbar.set_draw_target(ProgressDrawTarget::stderr());
-    pbar.set_style(ProgressStyle::default_bar()
-        .template("[{elapsed_precise}] [{wide_bar:.cyan/blue}] \
-            {bytes}/{total_bytes} ({percent}%) [{eta_precise}]"));
+    pbar.set_style(ProgressStyle::default_bar().template(
+        "[{elapsed_precise}] [{wide_bar:.cyan/blue}] \
+         {bytes}/{total_bytes} ({percent}%) [{eta_precise}]",
+    ));
 
     pbar
 }
@@ -220,23 +225,26 @@ fn bounded_slab_coord_iter(
     min: &[u64],
     max: &[u64],
 ) -> (impl Iterator<Item = Vec<u64>>, usize) {
-
-    let mut coord_ceil = max.iter()
+    let mut coord_ceil = max
+        .iter()
         .zip(data_attrs.get_block_size().iter())
         .map(|(&d, &s)| (d + u64::from(s) - 1) / u64::from(s))
         .collect::<Vec<_>>();
     coord_ceil.remove(axis as usize);
-    let mut coord_floor = min.iter()
+    let mut coord_floor = min
+        .iter()
         .zip(data_attrs.get_block_size().iter())
         .map(|(&d, &s)| d / u64::from(s))
         .collect::<Vec<_>>();
     coord_floor.remove(axis as usize);
-    let total_coords = coord_floor.iter()
+    let total_coords = coord_floor
+        .iter()
         .zip(coord_ceil.iter())
         .map(|(&min, &max)| max - min)
         .product::<u64>() as usize;
 
-    let iter = coord_ceil.into_iter()
+    let iter = coord_ceil
+        .into_iter()
         .zip(coord_floor.into_iter())
         .map(|(c, f)| f..c)
         .multi_cartesian_product()
@@ -248,48 +256,54 @@ fn bounded_slab_coord_iter(
     (iter, total_coords)
 }
 
-
 fn slab_coord_iter(
     data_attrs: &DatasetAttributes,
     axis: usize,
     slab_coord: u64,
 ) -> (impl Iterator<Item = Vec<u64>>, usize) {
-
     bounded_slab_coord_iter(
         data_attrs,
         axis,
         slab_coord,
         &vec![0; data_attrs.get_ndim()],
-        data_attrs.get_dimensions())
+        data_attrs.get_dimensions(),
+    )
 }
-
 
 /// Convience trait combined all the required traits on data types until trait
 /// aliases are stabilized.
 trait DataTypeBounds:
-        'static +
-        ReflectedType +
-        Sync + Send +
-        std::fmt::Debug + PartialEq +
-        num_traits::Zero + num_traits::ToPrimitive +
-        {}
+    'static
+    + ReflectedType
+    + Sync
+    + Send
+    + std::fmt::Debug
+    + PartialEq
+    + num_traits::Zero
+    + num_traits::ToPrimitive
+{
+}
 impl<T> DataTypeBounds for T
 where
-    T:
-        'static +
-        ReflectedType +
-        Sync + Send +
-        std::fmt::Debug + PartialEq +
-        num_traits::Zero + num_traits::ToPrimitive +
-        ,
-    VecDataBlock<T>: n5::DataBlock<T> +
-        {}
+    T: 'static
+        + ReflectedType
+        + Sync
+        + Send
+        + std::fmt::Debug
+        + PartialEq
+        + num_traits::Zero
+        + num_traits::ToPrimitive,
+    VecDataBlock<T>: n5::DataBlock<T>,
+{
+}
 
 /// Trait for mapping individual blocks within `BlockReaderMapReduce`.
 /// Factored as a trait rather than a generic method in order to allow
 /// specialization, and potentially reuse.
-trait BlockTypeMap<T> where T: DataTypeBounds {
-
+trait BlockTypeMap<T>
+where
+    T: DataTypeBounds,
+{
     type BlockResult: Send + 'static;
     type BlockArgument: Send + Sync + 'static;
 
@@ -301,36 +315,37 @@ trait BlockTypeMap<T> where T: DataTypeBounds {
         block: Result<Option<&VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static,;
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static;
 }
 
 trait BlockMap<Res: Send + 'static, Arg: Send + Sync + 'static>:
-        BlockTypeMap<u8, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<u16, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<u32, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<u64, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<i8, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<i16, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<i32, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<i64, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<f32, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<f64, BlockResult=Res, BlockArgument=Arg> +
-{}
+    BlockTypeMap<u8, BlockResult = Res, BlockArgument = Arg>
+    + BlockTypeMap<u16, BlockResult = Res, BlockArgument = Arg>
+    + BlockTypeMap<u32, BlockResult = Res, BlockArgument = Arg>
+    + BlockTypeMap<u64, BlockResult = Res, BlockArgument = Arg>
+    + BlockTypeMap<i8, BlockResult = Res, BlockArgument = Arg>
+    + BlockTypeMap<i16, BlockResult = Res, BlockArgument = Arg>
+    + BlockTypeMap<i32, BlockResult = Res, BlockArgument = Arg>
+    + BlockTypeMap<i64, BlockResult = Res, BlockArgument = Arg>
+    + BlockTypeMap<f32, BlockResult = Res, BlockArgument = Arg>
+    + BlockTypeMap<f64, BlockResult = Res, BlockArgument = Arg>
+{
+}
 
-impl<Res: Send + 'static, Arg: Send + Sync + 'static, T> BlockMap<Res, Arg> for T
-where T:
-        BlockTypeMap<u8, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<u16, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<u32, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<u64, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<i8, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<i16, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<i32, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<i64, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<f32, BlockResult=Res, BlockArgument=Arg> +
-        BlockTypeMap<f64, BlockResult=Res, BlockArgument=Arg> +
-{}
+impl<Res: Send + 'static, Arg: Send + Sync + 'static, T> BlockMap<Res, Arg> for T where
+    T: BlockTypeMap<u8, BlockResult = Res, BlockArgument = Arg>
+        + BlockTypeMap<u16, BlockResult = Res, BlockArgument = Arg>
+        + BlockTypeMap<u32, BlockResult = Res, BlockArgument = Arg>
+        + BlockTypeMap<u64, BlockResult = Res, BlockArgument = Arg>
+        + BlockTypeMap<i8, BlockResult = Res, BlockArgument = Arg>
+        + BlockTypeMap<i16, BlockResult = Res, BlockArgument = Arg>
+        + BlockTypeMap<i32, BlockResult = Res, BlockArgument = Arg>
+        + BlockTypeMap<i64, BlockResult = Res, BlockArgument = Arg>
+        + BlockTypeMap<f32, BlockResult = Res, BlockArgument = Arg>
+        + BlockTypeMap<f64, BlockResult = Res, BlockArgument = Arg>
+{
+}
 
 trait BlockReaderMapReduce {
     type BlockResult: Send + 'static;
@@ -340,14 +355,15 @@ trait BlockReaderMapReduce {
     // `Self`.
     type Map: BlockMap<Self::BlockResult, Self::BlockArgument>;
 
-    fn setup<N5> (
+    fn setup<N5>(
         _n: &N5,
         _dataset: &str,
         _data_attrs: &DatasetAttributes,
         _arg: &mut Self::BlockArgument,
     ) -> Result<()>
-        where N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         Ok(())
     }
 
@@ -355,7 +371,6 @@ trait BlockReaderMapReduce {
         data_attrs: &DatasetAttributes,
         _arg: &Self::BlockArgument,
     ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
-
         let coord_iter = data_attrs.coord_iter();
         let total_coords = coord_iter.len();
 
@@ -375,8 +390,9 @@ trait BlockReaderMapReduce {
         coord: GridCoord,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         use std::cell::RefCell;
         data_type_match! {
             *data_attrs.get_data_type(),
@@ -414,13 +430,12 @@ trait BlockReaderMapReduce {
         pool_size: Option<usize>,
         mut arg: Self::BlockArgument,
     ) -> Result<Self::ReduceResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         let data_attrs = n.get_dataset_attributes(dataset)?;
 
         Self::setup(n, dataset, &data_attrs, &mut arg)?;
-
 
         let (coord_iter, total_coords) = Self::coord_iter(&data_attrs, &arg);
         let pbar = RwLock::new(default_progress_bar(total_coords as u64));
@@ -447,12 +462,16 @@ trait BlockReaderMapReduce {
         });
 
         for coord in coord_iter {
-
             let local = scoped.clone();
 
             all_jobs.push(pool.spawn_fn(move || {
                 let block_result = Self::map_type_dispatch(
-                    &local.n, &local.dataset, &local.data_attrs, coord.into(), &local.arg)?;
+                    &local.n,
+                    &local.dataset,
+                    &local.data_attrs,
+                    coord.into(),
+                    &local.arg,
+                )?;
                 local.pbar.write().unwrap().inc(1);
                 Ok(block_result)
             }));

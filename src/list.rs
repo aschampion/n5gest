@@ -2,7 +2,6 @@ use std::convert::TryFrom;
 
 use super::*;
 
-
 #[derive(StructOpt, Debug)]
 pub struct ListOptions {
     /// N5 root path

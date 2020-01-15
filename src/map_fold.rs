@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[derive(StructOpt, Debug)]
 pub struct MapFoldOptions {
     /// Input N5 root path
@@ -26,8 +25,12 @@ impl CommandType for MapFoldCommand {
     type Options = MapFoldOptions;
 
     fn run(opt: &Options, mf_opt: &Self::Options) -> Result<()> {
-        let block_fold_expr: meval::Expr = mf_opt.block_fold_expr.clone()
-            .unwrap_or_else(|| mf_opt.fold_expr.clone()).parse().unwrap();
+        let block_fold_expr: meval::Expr = mf_opt
+            .block_fold_expr
+            .clone()
+            .unwrap_or_else(|| mf_opt.fold_expr.clone())
+            .parse()
+            .unwrap();
         let fold_expr: meval::Expr = mf_opt.fold_expr.parse().unwrap();
         // let fold_fn = fold_parsed.bind2("acc", "x").unwrap();
         let n = N5Filesystem::open(&mf_opt.n5_path)?;
@@ -40,13 +43,13 @@ impl CommandType for MapFoldCommand {
                 initial_val: mf_opt.initial_val,
                 fold_expr,
                 block_fold_expr,
-            })?;
+            },
+        )?;
         println!("{}", result);
 
         Ok(())
     }
 }
-
 
 struct MapFold;
 
@@ -59,10 +62,9 @@ struct MapFoldArgument {
 }
 
 impl<T> BlockTypeMap<T> for MapFold
-        where
-            T: DataTypeBounds,
+where
+    T: DataTypeBounds,
 {
-
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
 
@@ -74,13 +76,15 @@ impl<T> BlockTypeMap<T> for MapFold
         block_in: Result<Option<&VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         Ok(block_in?.map(|block| {
             let fold_fn = arg.fold_expr.clone().bind2("acc", "x").unwrap();
 
-            block.get_data().iter()
+            block
+                .get_data()
+                .iter()
                 .map(|x| x.to_f64().unwrap())
                 .fold(arg.initial_val, fold_fn)
         }))
@@ -98,10 +102,10 @@ impl BlockReaderMapReduce for MapFold {
         results: Vec<Self::BlockResult>,
         arg: &Self::BlockArgument,
     ) -> Self::ReduceResult {
-
         let fold_fn = arg.block_fold_expr.clone().bind2("acc", "x").unwrap();
 
-        results.into_iter()
+        results
+            .into_iter()
             .filter(Option::is_some)
             .map(Option::unwrap)
             .fold(arg.initial_val, fold_fn)

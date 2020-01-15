@@ -2,8 +2,10 @@ use super::*;
 
 use std::any::Any;
 
-use n5::{data_type_match, data_type_rstype_replace};
-
+use n5::{
+    data_type_match,
+    data_type_rstype_replace,
+};
 
 #[derive(StructOpt, Debug)]
 pub struct DeleteUniformBlocksOptions {
@@ -17,10 +19,10 @@ pub struct DeleteUniformBlocksOptions {
     #[structopt(name = "UNIFORM_VALUE")]
     uniform_value: String,
     /// Dry run, do not actually delete blocks
-    #[structopt(long="dry-run")]
+    #[structopt(long = "dry-run")]
     dry_run: bool,
     /// Print coordinates of deleted blocks
-    #[structopt(long="print-coords")]
+    #[structopt(long = "print-coords")]
     print_coords: bool,
 }
 
@@ -51,7 +53,8 @@ impl CommandType for DeleteUniformBlocksCommand {
                 n5_out: n.clone(),
                 uniform_value,
                 dry_run: dub_opt.dry_run,
-            })?;
+            },
+        )?;
 
         if dub_opt.print_coords {
             for coord in &deleted_coords {
@@ -59,34 +62,34 @@ impl CommandType for DeleteUniformBlocksCommand {
             }
         }
 
-        println!("Deleted {} blocks in {}",
+        println!(
+            "Deleted {} blocks in {}",
             deleted_coords.len(),
-            HumanDuration(started.elapsed()));
+            HumanDuration(started.elapsed())
+        );
 
         Ok(())
     }
 }
 
-
 struct DeleteUniformBlocks<N5O> {
     _phantom: std::marker::PhantomData<N5O>,
 }
 
-
 struct DeleteUniformBlocksArguments<N5O>
-where N5O: N5Writer + Sync + Send + 'static {
+where
+    N5O: N5Writer + Sync + Send + 'static,
+{
     n5_out: N5O,
     uniform_value: Box<dyn Any + Sync + Send + 'static>,
     dry_run: bool,
 }
 
-
 impl<N5O, T> BlockTypeMap<T> for DeleteUniformBlocks<N5O>
-        where
-            N5O: N5Writer + Sync + Send + Clone + 'static,
-            T: DataTypeBounds,
+where
+    N5O: N5Writer + Sync + Send + Clone + 'static,
+    T: DataTypeBounds,
 {
-
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
 
@@ -98,23 +101,22 @@ impl<N5O, T> BlockTypeMap<T> for DeleteUniformBlocks<N5O>
         block_opt: Result<Option<&VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         let num_vox = match block_opt? {
             Some(block) => {
-                let uniform_value_t: T = arg.uniform_value
-                    .downcast_ref::<T>().unwrap().clone();
+                let uniform_value_t: T = arg.uniform_value.downcast_ref::<T>().unwrap().clone();
 
                 if block.get_data().iter().all(|v| *v == uniform_value_t) {
-                    if ! arg.dry_run {
+                    if !arg.dry_run {
                         arg.n5_out.delete_block(dataset, &coord)?;
                     }
                     Some(coord)
                 } else {
                     None
                 }
-            },
+            }
             None => None,
         };
 
@@ -123,8 +125,8 @@ impl<N5O, T> BlockTypeMap<T> for DeleteUniformBlocks<N5O>
 }
 
 impl<N5O> BlockReaderMapReduce for DeleteUniformBlocks<N5O>
-    where
-        N5O: N5Writer + Sync + Send + Clone + 'static,
+where
+    N5O: N5Writer + Sync + Send + Clone + 'static,
 {
     type BlockResult = Option<GridCoord>;
     type BlockArgument = DeleteUniformBlocksArguments<N5O>;
@@ -136,7 +138,9 @@ impl<N5O> BlockReaderMapReduce for DeleteUniformBlocks<N5O>
         results: Vec<Self::BlockResult>,
         _arg: &Self::BlockArgument,
     ) -> Self::ReduceResult {
-
-        results.into_iter().filter_map(std::convert::identity).collect()
+        results
+            .into_iter()
+            .filter_map(std::convert::identity)
+            .collect()
     }
 }

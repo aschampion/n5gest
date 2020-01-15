@@ -1,11 +1,16 @@
 use super::*;
 
-use std::cmp::{max, min};
+use std::cmp::{
+    max,
+    min,
+};
 use std::convert::TryInto;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 use chrono::prelude::*;
-
 
 #[derive(StructOpt, Debug)]
 pub struct StatOptions {
@@ -24,20 +29,19 @@ impl CommandType for StatCommand {
 
     fn run(opt: &Options, st_opt: &Self::Options) -> Result<()> {
         let n = N5Filesystem::open(&st_opt.n5_path)?;
-        let result = Stat::run(
-            &n,
-            &st_opt.dataset,
-            opt.threads,
-            ())?;
+        let result = Stat::run(&n, &st_opt.dataset, opt.threads, ())?;
 
         if let Some(agg) = result {
-
-            let prep_date = |date: Option<SystemTime>| date.map(DateTime::<Local>::from)
-                .map(|date| ToString::to_string(&date))
-                .unwrap_or_else(String::new);
-            let prep_size = |size: Option<u64>| size.map(HumanBytes)
-                .map(|size| ToString::to_string(&size))
-                .unwrap_or_else(String::new);
+            let prep_date = |date: Option<SystemTime>| {
+                date.map(DateTime::<Local>::from)
+                    .map(|date| ToString::to_string(&date))
+                    .unwrap_or_else(String::new)
+            };
+            let prep_size = |size: Option<u64>| {
+                size.map(HumanBytes)
+                    .map(|size| ToString::to_string(&size))
+                    .unwrap_or_else(String::new)
+            };
 
             let mut md_table = Table::new();
             md_table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
@@ -115,18 +119,26 @@ struct SumMetadata {
 impl SumMetadata {
     fn average(&self, total: u64) -> (DataBlockMetadata, GridCoord) {
         let total32: u32 = total.try_into().unwrap();
-        (DataBlockMetadata {
-            created: self.created.map(|d| SystemTime::UNIX_EPOCH + d / total32),
-            accessed: self.accessed.map(|d| SystemTime::UNIX_EPOCH + d / total32),
-            modified: self.modified.map(|d| SystemTime::UNIX_EPOCH + d / total32),
-            size: self.size.map(|s| s / total),
-        },
-        self.block_coord.iter().cloned().map(|c| c / total).collect())
+        (
+            DataBlockMetadata {
+                created: self.created.map(|d| SystemTime::UNIX_EPOCH + d / total32),
+                accessed: self.accessed.map(|d| SystemTime::UNIX_EPOCH + d / total32),
+                modified: self.modified.map(|d| SystemTime::UNIX_EPOCH + d / total32),
+                size: self.size.map(|s| s / total),
+            },
+            self.block_coord
+                .iter()
+                .cloned()
+                .map(|c| c / total)
+                .collect(),
+        )
     }
 }
 
 fn option_fold<U, F>(a: Option<U>, b: Option<U>, f: F) -> Option<U>
-where F: FnOnce(U, U) -> U {
+where
+    F: FnOnce(U, U) -> U,
+{
     match (a, b) {
         (Some(a), Some(b)) => Some(f(a, b)),
         (a @ Some(_), None) => a,
@@ -149,8 +161,11 @@ impl std::ops::Add<(GridCoord, &DataBlockMetadata)> for SumMetadata {
             // Has not yet be initialized.
             coord
         } else {
-            self.block_coord.iter()
-                .zip(coord.iter()).map(|(&a, &b)| a + b).collect()
+            self.block_coord
+                .iter()
+                .zip(coord.iter())
+                .map(|(&a, &b)| a + b)
+                .collect()
         };
 
         Self {
@@ -166,10 +181,9 @@ impl std::ops::Add<(GridCoord, &DataBlockMetadata)> for SumMetadata {
 struct Stat;
 
 impl<T> BlockTypeMap<T> for Stat
-        where
-            T: DataTypeBounds,
+where
+    T: DataTypeBounds,
 {
-
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
 
@@ -181,9 +195,9 @@ impl<T> BlockTypeMap<T> for Stat
         _block_in: Result<Option<&VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         unimplemented!()
     }
 }
@@ -199,7 +213,6 @@ impl BlockReaderMapReduce for Stat {
         results: Vec<Self::BlockResult>,
         _arg: &Self::BlockArgument,
     ) -> Self::ReduceResult {
-
         let total = results.len().try_into().unwrap();
         let mut results = results.into_iter().filter_map(|b| b);
 
@@ -211,7 +224,7 @@ impl BlockReaderMapReduce for Stat {
                 min_block_coord: coord.clone(),
                 max_block_coord: coord,
                 occupied: 1,
-                total
+                total,
             };
 
             Some(results.fold(stats, |stats, (coord, block)| {
@@ -228,13 +241,21 @@ impl BlockReaderMapReduce for Stat {
                         modified: option_fold(stats.min_metadata.modified, block.modified, min),
                         size: option_fold(stats.min_metadata.size, block.size, min),
                     },
-                    min_block_coord: stats.min_block_coord.iter()
-                        .zip(coord.iter()).map(|(&a, &b)| min(a, b)).collect(),
-                    max_block_coord: stats.min_block_coord.iter()
-                        .zip(coord.iter()).map(|(&a, &b)| max(a, b)).collect(),
+                    min_block_coord: stats
+                        .min_block_coord
+                        .iter()
+                        .zip(coord.iter())
+                        .map(|(&a, &b)| min(a, b))
+                        .collect(),
+                    max_block_coord: stats
+                        .min_block_coord
+                        .iter()
+                        .zip(coord.iter())
+                        .map(|(&a, &b)| max(a, b))
+                        .collect(),
                     sum_metadata: stats.sum_metadata + (coord, &block),
                     occupied: stats.occupied + 1,
-                    total
+                    total,
                 }
             }))
         } else {
@@ -249,8 +270,9 @@ impl BlockReaderMapReduce for Stat {
         coord: GridCoord,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         n.block_metadata(dataset, data_attrs, &coord)
             .map(|maybe_meta| maybe_meta.map(|meta| (coord, meta)))
     }

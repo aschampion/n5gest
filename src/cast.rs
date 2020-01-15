@@ -1,7 +1,9 @@
 use super::*;
 
-use std::convert::{TryFrom, TryInto};
-
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 
 #[derive(StructOpt, Debug)]
 pub struct CastOptions {
@@ -42,19 +44,21 @@ impl CommandType for CastCommand {
                 n5_out,
                 dataset_out: cast_opt.output_dataset.to_owned(),
                 data_attrs_out: None, // TODO: this is a hack.
-            })?;
+            },
+        )?;
         let elapsed = started.elapsed();
-        println!("Converted {} (uncompressed) in {}",
+        println!(
+            "Converted {} (uncompressed) in {}",
             HumanBytes(num_bytes as u64),
-            HumanDuration(elapsed));
-        let throughput = 1e9 * (num_bytes as f64) /
-            (1e9 * (elapsed.as_secs() as f64) + f64::from(elapsed.subsec_nanos()));
+            HumanDuration(elapsed)
+        );
+        let throughput = 1e9 * (num_bytes as f64)
+            / (1e9 * (elapsed.as_secs() as f64) + f64::from(elapsed.subsec_nanos()));
         println!("({} / s)", HumanBytes(throughput as u64));
 
         Ok(())
     }
 }
-
 
 fn dispatch_cast<N5>(
     data_type: DataType,
@@ -63,9 +67,9 @@ fn dispatch_cast<N5>(
     pool_size: Option<usize>,
     arg: CastArguments<N5>,
 ) -> Result<usize>
-    where
-        N5: N5Writer + Sync + Send + Clone + 'static {
-
+where
+    N5: N5Writer + Sync + Send + Clone + 'static,
+{
     data_type_match! {
         data_type,
         {
@@ -85,20 +89,20 @@ struct Cast<N5O, TO> {
 
 #[derive(Clone)]
 struct CastArguments<N5O>
-        where
-            N5O: N5Writer + Sync + Send + Clone + 'static {
+where
+    N5O: N5Writer + Sync + Send + Clone + 'static,
+{
     n5_out: N5O,
     data_attrs_out: Option<DatasetAttributes>,
     dataset_out: String,
 }
 
 impl<N5O, TO, T> BlockTypeMap<T> for Cast<N5O, TO>
-        where
-            N5O: N5Writer + Sync + Send + Clone + 'static,
-            T: DataTypeBounds,
-            TO: DataTypeBounds,
+where
+    N5O: N5Writer + Sync + Send + Clone + 'static,
+    T: DataTypeBounds,
+    TO: DataTypeBounds,
 {
-
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
 
@@ -110,22 +114,25 @@ impl<N5O, TO, T> BlockTypeMap<T> for Cast<N5O, TO>
         _block_opt: Result<Option<&VecDataBlock<T>>>,
         _arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static {
-
-        Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Imcompatible cast types"))
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Imcompatible cast types",
+        ))
     }
 }
 
 impl<N5O, TO, T> BlockTypeMap<T> for Cast<N5O, TO>
-        where
-            N5O: N5Writer + Sync + Send + Clone + 'static,
-            T: DataTypeBounds,
-            TO: DataTypeBounds,
-            VecDataBlock<TO>: n5::WriteableDataBlock,
-            TO: TryFrom<T>,
-            <TO as TryFrom<T>>::Error: std::fmt::Debug {
-
+where
+    N5O: N5Writer + Sync + Send + Clone + 'static,
+    T: DataTypeBounds,
+    TO: DataTypeBounds,
+    VecDataBlock<TO>: n5::WriteableDataBlock,
+    TO: TryFrom<T>,
+    <TO as TryFrom<T>>::Error: std::fmt::Debug,
+{
     fn map<N5>(
         _n: &N5,
         _dataset: &str,
@@ -134,12 +141,14 @@ impl<N5O, TO, T> BlockTypeMap<T> for Cast<N5O, TO>
         block_opt: Result<Option<&VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         let num_vox = match block_opt? {
             Some(block) => {
-                let cast_data: Vec<TO> = block.get_data().iter()
+                let cast_data: Vec<TO> = block
+                    .get_data()
+                    .iter()
                     .cloned()
                     .map(|v| v.try_into())
                     .collect::<std::result::Result<Vec<TO>, _>>()
@@ -147,13 +156,15 @@ impl<N5O, TO, T> BlockTypeMap<T> for Cast<N5O, TO>
                 let cast_block = VecDataBlock::<TO>::new(
                     block.get_size().into(),
                     block.get_grid_position().into(),
-                    cast_data);
+                    cast_data,
+                );
                 arg.n5_out.write_block(
                     &arg.dataset_out,
                     &arg.data_attrs_out.as_ref().unwrap(),
-                    &cast_block)?;
+                    &cast_block,
+                )?;
                 block.get_num_elements() as usize
-            },
+            }
             None => 0,
         };
 
@@ -162,29 +173,32 @@ impl<N5O, TO, T> BlockTypeMap<T> for Cast<N5O, TO>
 }
 
 impl<N5O, TO> BlockReaderMapReduce for Cast<N5O, TO>
-        where
-            N5O: N5Writer + Sync + Send + Clone + 'static,
-            TO: DataTypeBounds,
+where
+    N5O: N5Writer + Sync + Send + Clone + 'static,
+    TO: DataTypeBounds,
 {
     type BlockResult = usize;
     type BlockArgument = CastArguments<N5O>;
     type ReduceResult = usize;
     type Map = Self;
 
-    fn setup<N5> (
+    fn setup<N5>(
         _n: &N5,
         _dataset: &str,
         data_attrs: &DatasetAttributes,
         arg: &mut Self::BlockArgument,
     ) -> Result<()>
-        where N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         arg.data_attrs_out = Some(DatasetAttributes::new(
             data_attrs.get_dimensions().into(),
             data_attrs.get_block_size().into(),
             TO::VARIANT,
-            data_attrs.get_compression().clone()));
-        arg.n5_out.create_dataset(&arg.dataset_out, arg.data_attrs_out.as_ref().unwrap())
+            data_attrs.get_compression().clone(),
+        ));
+        arg.n5_out
+            .create_dataset(&arg.dataset_out, arg.data_attrs_out.as_ref().unwrap())
     }
 
     fn reduce(
@@ -192,7 +206,6 @@ impl<N5O, TO> BlockReaderMapReduce for Cast<N5O, TO>
         results: Vec<Self::BlockResult>,
         _arg: &Self::BlockArgument,
     ) -> Self::ReduceResult {
-
         let num_vox: usize = results.iter().sum();
 
         num_vox * data_attrs.get_data_type().size_of()

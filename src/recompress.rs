@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[derive(StructOpt, Debug)]
 pub struct RecompressOptions {
     /// Input N5 root path
@@ -41,19 +40,21 @@ impl CommandType for RecompressCommand {
                 dataset_out: com_opt.output_dataset.to_owned(),
                 data_attrs_out: None, // TODO: this is a hack.
                 compression,
-            })?;
+            },
+        )?;
         let elapsed = started.elapsed();
-        println!("Converted {} (uncompressed) in {}",
+        println!(
+            "Converted {} (uncompressed) in {}",
             HumanBytes(num_bytes as u64),
-            HumanDuration(elapsed));
-        let throughput = 1e9 * (num_bytes as f64) /
-            (1e9 * (elapsed.as_secs() as f64) + f64::from(elapsed.subsec_nanos()));
+            HumanDuration(elapsed)
+        );
+        let throughput = 1e9 * (num_bytes as f64)
+            / (1e9 * (elapsed.as_secs() as f64) + f64::from(elapsed.subsec_nanos()));
         println!("({} / s)", HumanBytes(throughput as u64));
 
         Ok(())
     }
 }
-
 
 struct Recompress<N5O> {
     _phantom: std::marker::PhantomData<N5O>,
@@ -68,11 +69,10 @@ struct RecompressArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
 }
 
 impl<N5O: N5Writer + Sync + Send + Clone + 'static, T> BlockTypeMap<T> for Recompress<N5O>
-        where
-            T: DataTypeBounds,
-            VecDataBlock<T>: n5::WriteableDataBlock,
+where
+    T: DataTypeBounds,
+    VecDataBlock<T>: n5::WriteableDataBlock,
 {
-
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
 
@@ -84,14 +84,18 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static, T> BlockTypeMap<T> for Recom
         block_in: Result<Option<&VecDataBlock<T>>>,
         arg: &Self::BlockArgument,
     ) -> Result<Self::BlockResult>
-        where
-            N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         let num_vox = match block_in? {
             Some(block) => {
-                arg.n5_out.write_block(&arg.dataset_out, &arg.data_attrs_out.as_ref().unwrap(), block)?;
+                arg.n5_out.write_block(
+                    &arg.dataset_out,
+                    &arg.data_attrs_out.as_ref().unwrap(),
+                    block,
+                )?;
                 block.get_num_elements() as usize
-            },
+            }
             None => 0,
         };
 
@@ -105,20 +109,23 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Rec
     type ReduceResult = usize;
     type Map = Self;
 
-    fn setup<N5> (
+    fn setup<N5>(
         _n: &N5,
         _dataset: &str,
         data_attrs: &DatasetAttributes,
         arg: &mut Self::BlockArgument,
     ) -> Result<()>
-        where N5: N5Reader + Sync + Send + Clone + 'static {
-
+    where
+        N5: N5Reader + Sync + Send + Clone + 'static,
+    {
         arg.data_attrs_out = Some(DatasetAttributes::new(
             data_attrs.get_dimensions().into(),
             data_attrs.get_block_size().into(),
             *data_attrs.get_data_type(),
-            arg.compression.clone()));
-        arg.n5_out.create_dataset(&arg.dataset_out, arg.data_attrs_out.as_ref().unwrap())
+            arg.compression.clone(),
+        ));
+        arg.n5_out
+            .create_dataset(&arg.dataset_out, arg.data_attrs_out.as_ref().unwrap())
     }
 
     fn reduce(
@@ -126,7 +133,6 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Rec
         results: Vec<Self::BlockResult>,
         _arg: &Self::BlockArgument,
     ) -> Self::ReduceResult {
-
         let num_vox: usize = results.iter().sum();
 
         num_vox * data_attrs.get_data_type().size_of()
