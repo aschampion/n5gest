@@ -31,6 +31,9 @@ SUBCOMMANDS:
     help               Prints this message or the help of the given subcommand(s)
     import             Import a sequence of image files as a series of z-sections into a 3D N5 dataset.
     ls                 List all datasets under an N5 root.
+    map                Run simple math expressions mapping values to new datasets. For example, to clip
+                       values in a dataset: `map example.n5 dataset_in example.n5 dataset_out "min(128, x)"`
+                       Note that this converts back and forth to `f64` for the calculation.
     map-fold           Run simple math expressions as folds over blocks. For example, to find the
                        maximum value in a positive dataset: `map-fold example.n5 dataset 0 "max(acc, x)"`
     recompress         Recompress an existing dataset into a new dataset with a given compression.

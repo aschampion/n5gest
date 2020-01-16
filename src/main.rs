@@ -59,6 +59,7 @@ mod delete_uniform_blocks;
 mod export;
 mod import;
 mod list;
+mod map;
 mod map_fold;
 mod recompress;
 mod stat;
@@ -107,6 +108,12 @@ enum Command {
     /// N5 dataset.
     #[structopt(name = "import")]
     Import(import::ImportOptions),
+    /// Run simple math expressions mapping values to new datasets.
+    /// For example, to clip values in a dataset:
+    /// `map example.n5 dataset_in example.n5 dataset_out "min(128, x)"`
+    /// Note that this converts back and forth to `f64` for the calculation.
+    #[structopt(name = "map")]
+    Map(map::MapOptions),
     /// Run simple math expressions as folds over blocks.
     /// For example, to find the maximum value in a positive dataset:
     /// `map-fold example.n5 dataset 0 "max(acc, x)"`
@@ -196,6 +203,8 @@ fn main() -> Result<()> {
             export::ExportCommand::run(&opt, exp_opt)?,
         Command::Import(ref imp_opt) =>
             import::ImportCommand::run(&opt, imp_opt)?,
+        Command::Map(ref m_opt) =>
+            map::MapCommand::run(&opt, m_opt)?,
         Command::MapFold(ref mf_opt) =>
             map_fold::MapFoldCommand::run(&opt, mf_opt)?,
         Command::Recompress(ref com_opt) =>
@@ -279,6 +288,7 @@ trait DataTypeBounds:
     + Send
     + std::fmt::Debug
     + PartialEq
+    + num_traits::NumCast
     + num_traits::Zero
     + num_traits::ToPrimitive
 {
@@ -291,6 +301,7 @@ where
         + Send
         + std::fmt::Debug
         + PartialEq
+        + num_traits::NumCast
         + num_traits::Zero
         + num_traits::ToPrimitive,
     VecDataBlock<T>: n5::DataBlock<T>,
