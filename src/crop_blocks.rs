@@ -115,7 +115,7 @@ where
                     cropped.as_slice_memory_order().unwrap().to_owned(),
                 );
                 arg.n5_out
-                    .write_block(dataset, data_attrs, &cropped_block)?;
+                    .write_block(&arg.dataset_out, data_attrs, &cropped_block)?;
                 Some(cropped_block.get_num_elements() as usize)
             }
             None => None,
@@ -133,14 +133,14 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
 
     fn setup<N5>(
         _n: &N5,
-        dataset: &str,
+        _dataset: &str,
         data_attrs: &DatasetAttributes,
         arg: &mut Self::BlockArgument,
     ) -> Result<()>
     where
         N5: N5Reader + Sync + Send + Clone + 'static,
     {
-        arg.n5_out.create_dataset(dataset, data_attrs)
+        arg.n5_out.create_dataset(&arg.dataset_out, data_attrs)
     }
 
     fn coord_iter(
