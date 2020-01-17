@@ -1,5 +1,6 @@
 #![recursion_limit = "256"]
 #![cfg_attr(feature = "nightly", feature(specialization))]
+#![forbid(unsafe_code)]
 
 use chrono;
 use futures;
