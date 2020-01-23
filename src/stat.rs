@@ -248,7 +248,7 @@ impl BlockReaderMapReduce for Stat {
                         .map(|(&a, &b)| min(a, b))
                         .collect(),
                     max_block_coord: stats
-                        .min_block_coord
+                        .max_block_coord
                         .iter()
                         .zip(coord.iter())
                         .map(|(&a, &b)| max(a, b))
