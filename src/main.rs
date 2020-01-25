@@ -195,7 +195,7 @@ fn main() -> Result<()> {
             bench_read::BenchReadCommand::run(&opt, br_opt)?,
         #[cfg(feature = "nightly")]
         Command::Cast(ref cast_opt) =>
-            cast::CastCommand::run(&opt, cast_opt).unwrap(),
+            cast::CastCommand::run(&opt, cast_opt)?,
         Command::CropBlocks(ref crop_opt) =>
             crop_blocks::CropBlocksCommand::run(&opt, crop_opt)?,
         Command::DeleteUniformBlocks(ref dub_opt) =>
