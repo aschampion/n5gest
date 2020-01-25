@@ -53,6 +53,7 @@ mod processing;
 #[derive(StructOpt, Debug)]
 #[structopt(
     name = "n5gest",
+    author,
     global_settings(&[
         structopt::clap::AppSettings::ColoredHelp,
         structopt::clap::AppSettings::VersionlessSubcommands,
