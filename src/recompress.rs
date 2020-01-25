@@ -17,6 +17,8 @@ pub struct RecompressOptions {
     /// Output N5 dataset
     #[structopt(name = "OUPUT_DATASET")]
     output_dataset: String,
+    #[structopt(flatten)]
+    bounds: GridBoundsOption,
 }
 
 pub struct RecompressCommand;
@@ -34,6 +36,7 @@ impl CommandType for RecompressCommand {
         let num_bytes = Recompress::run(
             &n5_in,
             &com_opt.input_dataset,
+            &*com_opt.bounds.to_factory(),
             opt.threads,
             RecompressArguments {
                 n5_out,

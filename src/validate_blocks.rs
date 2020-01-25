@@ -8,6 +8,8 @@ pub struct ValidateBlocksOptions {
     /// Input N5 dataset
     #[structopt(name = "DATASET")]
     dataset: String,
+    #[structopt(flatten)]
+    bounds: GridBoundsOption,
 }
 
 pub struct ValidateBlocksCommand;
@@ -18,7 +20,13 @@ impl CommandType for ValidateBlocksCommand {
     fn run(opt: &Options, vb_opt: &Self::Options) -> Result<()> {
         let n = N5Filesystem::open(&vb_opt.n5_path)?;
         let started = Instant::now();
-        let invalid = ValidateBlocks::run(&n, &vb_opt.dataset, opt.threads, ())?;
+        let invalid = ValidateBlocks::run(
+            &n,
+            &vb_opt.dataset,
+            &*vb_opt.bounds.to_factory(),
+            opt.threads,
+            (),
+        )?;
         if !invalid.errored.is_empty() {
             eprintln!("Found {} errored block(s)", invalid.errored.len());
             for block_idx in invalid.errored.iter() {

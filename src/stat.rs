@@ -20,6 +20,8 @@ pub struct StatOptions {
     /// Input N5 dataset
     #[structopt(name = "DATASET")]
     dataset: String,
+    #[structopt(flatten)]
+    bounds: GridBoundsOption,
 }
 
 pub struct StatCommand;
@@ -29,7 +31,13 @@ impl CommandType for StatCommand {
 
     fn run(opt: &Options, st_opt: &Self::Options) -> Result<()> {
         let n = N5Filesystem::open(&st_opt.n5_path)?;
-        let result = Stat::run(&n, &st_opt.dataset, opt.threads, ())?;
+        let result = Stat::run(
+            &n,
+            &st_opt.dataset,
+            &*st_opt.bounds.to_factory(),
+            opt.threads,
+            (),
+        )?;
 
         if let Some(agg) = result {
             let prep_date = |date: Option<SystemTime>| {

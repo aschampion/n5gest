@@ -24,6 +24,8 @@ pub struct DeleteUniformBlocksOptions {
     /// Print coordinates of deleted blocks
     #[structopt(long = "print-coords")]
     print_coords: bool,
+    #[structopt(flatten)]
+    bounds: GridBoundsOption,
 }
 
 pub struct DeleteUniformBlocksCommand;
@@ -48,6 +50,7 @@ impl CommandType for DeleteUniformBlocksCommand {
         let deleted_coords = DeleteUniformBlocks::run(
             &n,
             &dub_opt.dataset,
+            &*dub_opt.bounds.to_factory(),
             opt.threads,
             DeleteUniformBlocksArguments {
                 n5_out: n.clone(),

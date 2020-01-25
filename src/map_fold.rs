@@ -17,6 +17,8 @@ pub struct MapFoldOptions {
     /// Expression for folding over block results. By default FOLD_EXPR is used.
     #[structopt(name = "BLOCK_FOLD_EXPR")]
     block_fold_expr: Option<String>,
+    #[structopt(flatten)]
+    bounds: GridBoundsOption,
 }
 
 pub struct MapFoldCommand;
@@ -38,6 +40,7 @@ impl CommandType for MapFoldCommand {
         let result = MapFold::run(
             &n,
             &mf_opt.dataset,
+            &*mf_opt.bounds.to_factory(),
             opt.threads,
             MapFoldArgument {
                 initial_val: mf_opt.initial_val,

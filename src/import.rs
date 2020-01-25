@@ -178,7 +178,11 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
 
     futures::future::join_all(slab_load_jobs).wait()?;
 
-    let (slab_coord_iter, total_coords) = slab_coord_iter(&*data_attrs, 2, slab_coord as u64);
+    let coord_iter = GridSlabCoordIter {
+        axis: 2,
+        slab_coord: slab_coord as u64,
+    };
+    let (slab_coord_iter, total_coords) = coord_iter.coord_iter(&*data_attrs);
     let mut slab_coord_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
 
     for coord in slab_coord_iter {

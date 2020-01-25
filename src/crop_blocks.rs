@@ -35,11 +35,13 @@ impl CommandType for CropBlocksCommand {
         let (num_blocks, num_bytes) = CropBlocks::run(
             &n5_in,
             &crop_opt.input_dataset,
+            &AxisPositiveExtentFaceCoordIteratorFactory {
+                axis: crop_opt.axis,
+            },
             opt.threads,
             CropBlocksArguments {
                 n5_out,
                 dataset_out: crop_opt.output_dataset.to_owned(),
-                axis: crop_opt.axis,
             },
         )?;
         println!(
@@ -61,7 +63,37 @@ struct CropBlocks<N5O> {
 struct CropBlocksArguments<N5O: N5Writer + Sync + Send + Clone + 'static> {
     n5_out: N5O,
     dataset_out: String,
+}
+
+struct AxisPositiveExtentFaceCoordIteratorFactory {
     axis: i32,
+}
+
+impl CoordIteratorFactory for AxisPositiveExtentFaceCoordIteratorFactory {
+    fn coord_iter(
+        &self,
+        data_attrs: &DatasetAttributes,
+    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
+        let axis = self.axis;
+        let mut coord_ceil = data_attrs
+            .get_dimensions()
+            .iter()
+            .zip(data_attrs.get_block_size().iter())
+            .map(|(&d, &s)| (d + u64::from(s) - 1) / u64::from(s))
+            .collect::<Vec<_>>();
+        let axis_ceil = coord_ceil.remove(axis as usize);
+        let total_coords = coord_ceil.iter().product::<u64>() as usize;
+        let coord_iter = coord_ceil
+            .into_iter()
+            .map(|c| 0..c)
+            .multi_cartesian_product()
+            .map(move |mut c| {
+                c.insert(axis as usize, axis_ceil - 1);
+                c
+            });
+
+        (Box::new(coord_iter), total_coords)
+    }
 }
 
 impl<N5O: N5Writer + Sync + Send + Clone + 'static, T> BlockTypeMap<T> for CropBlocks<N5O>
@@ -141,31 +173,6 @@ impl<N5O: N5Writer + Sync + Send + Clone + 'static> BlockReaderMapReduce for Cro
         N5: N5Reader + Sync + Send + Clone + 'static,
     {
         arg.n5_out.create_dataset(&arg.dataset_out, data_attrs)
-    }
-
-    fn coord_iter(
-        data_attrs: &DatasetAttributes,
-        arg: &Self::BlockArgument,
-    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
-        let axis = arg.axis;
-        let mut coord_ceil = data_attrs
-            .get_dimensions()
-            .iter()
-            .zip(data_attrs.get_block_size().iter())
-            .map(|(&d, &s)| (d + u64::from(s) - 1) / u64::from(s))
-            .collect::<Vec<_>>();
-        let axis_ceil = coord_ceil.remove(axis as usize);
-        let total_coords = coord_ceil.iter().product::<u64>() as usize;
-        let coord_iter = coord_ceil
-            .into_iter()
-            .map(|c| 0..c)
-            .multi_cartesian_product()
-            .map(move |mut c| {
-                c.insert(axis as usize, axis_ceil - 1);
-                c
-            });
-
-        (Box::new(coord_iter), total_coords)
     }
 
     fn reduce(

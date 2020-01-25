@@ -22,6 +22,8 @@ pub struct CastOptions {
     /// Output N5 dataset
     #[structopt(name = "OUPUT_DATASET")]
     output_dataset: String,
+    #[structopt(flatten)]
+    bounds: GridBoundsOption,
 }
 
 pub struct CastCommand;
@@ -39,6 +41,7 @@ impl CommandType for CastCommand {
             data_type,
             &n5_in,
             &cast_opt.input_dataset,
+            &*cast_opt.bounds.to_factory(),
             opt.threads,
             CastArguments {
                 n5_out,

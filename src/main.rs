@@ -44,6 +44,7 @@ use n5::prelude::*;
 use n5::{
     data_type_match,
     data_type_rstype_replace,
+    smallvec::smallvec,
 };
 use num_traits::{
     FromPrimitive,
@@ -234,56 +235,116 @@ fn default_progress_bar(size: u64) -> ProgressBar {
     pbar
 }
 
-fn bounded_slab_coord_iter(
-    data_attrs: &DatasetAttributes,
-    axis: usize,
-    slab_coord: u64,
-    min: &[u64],
-    max: &[u64],
-) -> (impl Iterator<Item = Vec<u64>>, usize) {
-    let mut coord_ceil = max
-        .iter()
-        .zip(data_attrs.get_block_size().iter())
-        .map(|(&d, &s)| (d + u64::from(s) - 1) / u64::from(s))
-        .collect::<Vec<_>>();
-    coord_ceil.remove(axis as usize);
-    let mut coord_floor = min
-        .iter()
-        .zip(data_attrs.get_block_size().iter())
-        .map(|(&d, &s)| d / u64::from(s))
-        .collect::<Vec<_>>();
-    coord_floor.remove(axis as usize);
-    let total_coords = coord_floor
-        .iter()
-        .zip(coord_ceil.iter())
-        .map(|(&min, &max)| max - min)
-        .product::<u64>() as usize;
-
-    let iter = coord_ceil
-        .into_iter()
-        .zip(coord_floor.into_iter())
-        .map(|(c, f)| f..c)
-        .multi_cartesian_product()
-        .map(move |mut c| {
-            c.insert(axis as usize, slab_coord);
-            c
-        });
-
-    (iter, total_coords)
+trait CoordIteratorFactory {
+    fn coord_iter(
+        &self,
+        data_attrs: &DatasetAttributes,
+    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize);
 }
 
-fn slab_coord_iter(
-    data_attrs: &DatasetAttributes,
+struct DefaultCoordIter {}
+
+impl CoordIteratorFactory for DefaultCoordIter {
+    fn coord_iter(
+        &self,
+        data_attrs: &DatasetAttributes,
+    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
+        let coord_iter = data_attrs.coord_iter();
+        let total_coords = coord_iter.len();
+
+        (Box::new(coord_iter), total_coords)
+    }
+}
+
+struct VoxelBoundedSlabCoordIter {
     axis: usize,
     slab_coord: u64,
-) -> (impl Iterator<Item = Vec<u64>>, usize) {
-    bounded_slab_coord_iter(
-        data_attrs,
-        axis,
-        slab_coord,
-        &vec![0; data_attrs.get_ndim()],
-        data_attrs.get_dimensions(),
-    )
+    min: GridCoord,
+    max: GridCoord,
+}
+
+impl CoordIteratorFactory for VoxelBoundedSlabCoordIter {
+    fn coord_iter(
+        &self,
+        data_attrs: &DatasetAttributes,
+    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
+        // Necessary for moving into closures.
+
+        let axis = self.axis;
+        let slab_coord = self.slab_coord;
+        let mut coord_ceil = self
+            .max
+            .iter()
+            .zip(data_attrs.get_block_size().iter())
+            .map(|(&d, &s)| (d + u64::from(s) - 1) / u64::from(s))
+            .collect::<Vec<_>>();
+        coord_ceil.remove(axis as usize);
+        let mut coord_floor = self
+            .min
+            .iter()
+            .zip(data_attrs.get_block_size().iter())
+            .map(|(&d, &s)| d / u64::from(s))
+            .collect::<Vec<_>>();
+        coord_floor.remove(axis as usize);
+        let total_coords = coord_floor
+            .iter()
+            .zip(coord_ceil.iter())
+            .map(|(&min, &max)| max - min)
+            .product::<u64>() as usize;
+
+        let iter = coord_ceil
+            .into_iter()
+            .zip(coord_floor.into_iter())
+            .map(|(c, f)| f..c)
+            .multi_cartesian_product()
+            .map(move |mut c| {
+                c.insert(axis as usize, slab_coord);
+                c
+            });
+
+        (Box::new(iter), total_coords)
+    }
+}
+
+struct GridSlabCoordIter {
+    axis: usize,
+    slab_coord: u64,
+}
+
+impl CoordIteratorFactory for GridSlabCoordIter {
+    fn coord_iter(
+        &self,
+        data_attrs: &DatasetAttributes,
+    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
+        VoxelBoundedSlabCoordIter {
+            axis: self.axis,
+            slab_coord: self.slab_coord,
+            min: smallvec![0; data_attrs.get_ndim()],
+            max: data_attrs.get_dimensions().into(),
+        }
+        .coord_iter(data_attrs)
+    }
+}
+
+/// Common structopt options for commands that support grid coordinate bounds
+/// for their coordinate iterators.
+#[derive(StructOpt, Debug)]
+struct GridBoundsOption {
+    /// Axis along which to bound the grid coordinate slab.
+    #[structopt(long = "slab-axis", requires("slab-coord"))]
+    axis: Option<usize>,
+    /// Grid coordinate of the slab to bound to along the axis given by `slab-axis`.
+    #[structopt(long = "slab-coord", requires("axis"))]
+    slab_coord: Option<u64>,
+}
+
+impl GridBoundsOption {
+    fn to_factory(&self) -> Box<dyn CoordIteratorFactory> {
+        match (self.axis, self.slab_coord) {
+            (Some(axis), Some(slab_coord)) => Box::new(GridSlabCoordIter { axis, slab_coord }),
+            _ => Box::new(DefaultCoordIter {}),
+        }
+    }
 }
 
 /// Convience trait combined all the required traits on data types until trait
@@ -385,16 +446,6 @@ trait BlockReaderMapReduce {
         Ok(())
     }
 
-    fn coord_iter(
-        data_attrs: &DatasetAttributes,
-        _arg: &Self::BlockArgument,
-    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
-        let coord_iter = data_attrs.coord_iter();
-        let total_coords = coord_iter.len();
-
-        (Box::new(coord_iter), total_coords)
-    }
-
     fn reduce(
         data_attrs: &DatasetAttributes,
         results: Vec<Self::BlockResult>,
@@ -442,20 +493,22 @@ trait BlockReaderMapReduce {
         }
     }
 
-    fn run<N5>(
+    fn run<N5, CI>(
         n: &N5,
         dataset: &str,
+        coord_iter_factory: &CI,
         pool_size: Option<usize>,
         mut arg: Self::BlockArgument,
     ) -> Result<Self::ReduceResult>
     where
         N5: N5Reader + Sync + Send + Clone + 'static,
+        CI: CoordIteratorFactory + ?Sized,
     {
         let data_attrs = n.get_dataset_attributes(dataset)?;
 
         Self::setup(n, dataset, &data_attrs, &mut arg)?;
 
-        let (coord_iter, total_coords) = Self::coord_iter(&data_attrs, &arg);
+        let (coord_iter, total_coords) = coord_iter_factory.coord_iter(&data_attrs);
         let pbar = RwLock::new(default_progress_bar(total_coords as u64));
 
         let mut all_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);

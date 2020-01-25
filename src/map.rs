@@ -17,6 +17,8 @@ pub struct MapOptions {
     /// Expression for mapping values `x`
     #[structopt(name = "MAP_EXPR")]
     map_expr: String,
+    #[structopt(flatten)]
+    bounds: GridBoundsOption,
 }
 
 pub struct MapCommand;
@@ -33,6 +35,7 @@ impl CommandType for MapCommand {
         let num_bytes = Map::run(
             &n5_in,
             &m_opt.input_dataset,
+            &*m_opt.bounds.to_factory(),
             opt.threads,
             MapArguments {
                 n5_out,

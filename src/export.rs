@@ -148,8 +148,13 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
     min_vox: &[u64; 3],
     max_vox: &[u64; 3],
 ) -> Result<()> {
-    let (slab_coord_iter, total_coords) =
-        bounded_slab_coord_iter(&*data_attrs, 2, slab_coord as u64, min_vox, max_vox);
+    let coord_iter = VoxelBoundedSlabCoordIter {
+        axis: 2,
+        slab_coord: slab_coord as u64,
+        min: (&min_vox[..]).into(),
+        max: (&max_vox[..]).into(),
+    };
+    let (slab_coord_iter, total_coords) = coord_iter.coord_iter(&*data_attrs);
     let mut slab_coord_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
 
     let slab_z = slab_coord as u64 * u64::from(data_attrs.get_block_size()[2]);

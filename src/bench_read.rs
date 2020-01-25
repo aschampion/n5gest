@@ -8,6 +8,8 @@ pub struct BenchReadOptions {
     /// Input N5 dataset
     #[structopt(name = "DATASET")]
     dataset: String,
+    #[structopt(flatten)]
+    bounds: GridBoundsOption,
 }
 
 pub struct BenchReadCommand;
@@ -18,7 +20,13 @@ impl CommandType for BenchReadCommand {
     fn run(opt: &Options, br_opt: &Self::Options) -> Result<()> {
         let n = N5Filesystem::open(&br_opt.n5_path)?;
         let started = Instant::now();
-        let num_bytes = BenchRead::run(&n, &br_opt.dataset, opt.threads, ())?;
+        let num_bytes = BenchRead::run(
+            &n,
+            &br_opt.dataset,
+            &*br_opt.bounds.to_factory(),
+            opt.threads,
+            (),
+        )?;
         let elapsed = started.elapsed();
         println!(
             "Read {} (uncompressed) in {}",
