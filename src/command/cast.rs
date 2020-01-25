@@ -1,9 +1,16 @@
-use super::*;
+use crate::common::*;
 
 use std::convert::{
     TryFrom,
     TryInto,
 };
+
+use n5::{
+    data_type_match,
+    data_type_rstype_replace,
+};
+
+use crate::iterator::CoordIteratorFactory;
 
 #[derive(StructOpt, Debug)]
 pub struct CastOptions {
@@ -63,15 +70,17 @@ impl CommandType for CastCommand {
     }
 }
 
-fn dispatch_cast<N5>(
+fn dispatch_cast<N5, CI>(
     data_type: DataType,
     n5_in: &N5,
     input_dataset: &str,
+    coord_iter_factory: &CI,
     pool_size: Option<usize>,
     arg: CastArguments<N5>,
 ) -> Result<usize>
 where
     N5: N5Writer + Sync + Send + Clone + 'static,
+    CI: CoordIteratorFactory + ?Sized,
 {
     data_type_match! {
         data_type,
@@ -79,6 +88,7 @@ where
             Cast::<_, RsType>::run(
                 n5_in,
                 input_dataset,
+                coord_iter_factory,
                 pool_size,
                 arg)
         }

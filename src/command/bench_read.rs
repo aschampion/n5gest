@@ -1,4 +1,4 @@
-use super::*;
+use crate::common::*;
 
 #[derive(StructOpt, Debug)]
 pub struct BenchReadOptions {

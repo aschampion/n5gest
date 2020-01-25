@@ -1,6 +1,9 @@
 use std::convert::TryFrom;
 
-use super::*;
+use prettytable::Table;
+
+use crate::common::*;
+use crate::MetricPrefix;
 
 #[derive(StructOpt, Debug)]
 pub struct ListOptions {

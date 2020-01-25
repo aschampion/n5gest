@@ -1,4 +1,4 @@
-use super::*;
+use crate::common::*;
 
 use std::cmp::{
     max,
@@ -11,6 +11,7 @@ use std::time::{
 };
 
 use chrono::prelude::*;
+use prettytable::Table;
 
 #[derive(StructOpt, Debug)]
 pub struct StatOptions {
