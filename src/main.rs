@@ -68,7 +68,13 @@ mod validate_blocks;
 
 /// Utilities for N5 files.
 #[derive(StructOpt, Debug)]
-#[structopt(name = "n5gest")]
+#[structopt(
+    name = "n5gest",
+    global_settings(&[
+        structopt::clap::AppSettings::ColoredHelp,
+        structopt::clap::AppSettings::VersionlessSubcommands,
+    ])
+)]
 struct Options {
     /// Number of threads for parallel processing.
     /// By default, the number of CPU cores is used.
