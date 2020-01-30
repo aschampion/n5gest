@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::convert::TryFrom;
 
+use itertools::Itertools;
 use prettytable::Table;
 
 use crate::common::*;
@@ -21,7 +23,7 @@ impl CommandType for ListCommand {
         let n = N5Filesystem::open(&ls_opt.n5_path)?;
         let mut group_stack = vec![("".to_owned(), n.list("")?.into_iter())];
 
-        let mut datasets = vec![];
+        let mut datasets = HashMap::new();
 
         while let Some((g_path, mut g_iter)) = group_stack.pop() {
             if let Some(next_item) = g_iter.next() {
@@ -32,7 +34,7 @@ impl CommandType for ListCommand {
                 };
                 group_stack.push((g_path, g_iter));
                 if let Ok(ds_attr) = n.get_dataset_attributes(&path) {
-                    datasets.push((path, ds_attr));
+                    datasets.insert(path, ds_attr);
                 } else {
                     let next_g_iter = n.list(&path)?.into_iter();
                     group_stack.push((path, next_g_iter));
@@ -53,7 +55,7 @@ impl CommandType for ListCommand {
             "Compression",
         ]);
 
-        for (path, attr) in datasets {
+        for (path, attr) in datasets.into_iter().sorted_by(|a, b| Ord::cmp(&a.0, &b.0)) {
             let numel = attr.get_num_elements();
             let (numel, prefix) = MetricPrefix::reduce(numel);
             let numblocks = usize::try_from(attr.get_num_blocks()).unwrap();
