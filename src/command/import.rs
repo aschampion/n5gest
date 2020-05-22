@@ -143,10 +143,8 @@ impl CommandType for ImportCommand {
 
 fn color_to_dtype(color: image::ColorType) -> DataType {
     match color {
-        image::ColorType::Gray(8) => DataType::UINT8,
-        image::ColorType::Gray(16) => DataType::UINT16,
-        image::ColorType::Gray(32) => DataType::UINT32,
-        image::ColorType::Gray(64) => DataType::UINT64,
+        image::ColorType::L8 => DataType::UINT8,
+        image::ColorType::L16 => DataType::UINT16,
         _ => unimplemented!(),
     }
 }

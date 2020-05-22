@@ -141,10 +141,8 @@ impl CommandType for ExportCommand {
 
 fn dtype_to_color(dtype: DataType) -> image::ColorType {
     match dtype {
-        DataType::UINT8 => image::ColorType::Gray(8),
-        DataType::UINT16 => image::ColorType::Gray(16),
-        DataType::UINT32 => image::ColorType::Gray(32),
-        DataType::UINT64 => image::ColorType::Gray(64),
+        DataType::UINT8 => image::ColorType::L8,
+        DataType::UINT16 => image::ColorType::L16,
         _ => unimplemented!(),
     }
 }

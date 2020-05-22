@@ -34,10 +34,10 @@ structopt = "0.3"
 serde_plain = { version = "0.3", optional = true }
 
 [dependencies.image]
-version = "0.22"
+version = "0.23"
 # Don't include jpeg_rayon dependency, hdr which includes scoped_threadpool, or ico.
 default-features = false
-features = ["gif_codec", "jpeg", "png_codec", "pnm", "tga", "tiff", "webp", "bmp", "dxt"]
+features = ["gif", "jpeg", "png", "pnm", "tga", "tiff", "webp", "bmp", "dxt"]
 
 [profile.release]
 lto = true
