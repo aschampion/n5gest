@@ -6,7 +6,6 @@
 extern crate num_derive;
 #[macro_use]
 extern crate prettytable;
-#[cfg(feature = "nightly")]
 extern crate serde_plain;
 
 use indicatif::{
@@ -44,6 +43,14 @@ mod common {
         GridBoundsOption,
         Options,
     };
+
+    pub(crate) fn from_plain_or_json_str<'a, T: serde::Deserialize<'a> + std::str::FromStr>(
+        serial: &'a str,
+    ) -> serde_json::Result<T> {
+        serial
+            .parse::<T>()
+            .or_else(|_| serde_json::from_str(serial))
+    }
 }
 mod iterator;
 mod processing;

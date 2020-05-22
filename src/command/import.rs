@@ -33,7 +33,7 @@ pub struct ImportOptions {
     /// Ouput N5 dataset
     #[structopt(name = "DATASET")]
     dataset: String,
-    /// New N5 compression (JSON), e.g., '{"type": "gzip"}'
+    /// New N5 compression (optionally JSON), e.g., 'gzip' or '{"type": "gzip", "level": 2}'
     #[structopt(name = "COMPRESSION")]
     compression: String,
     /// Block size, e.g., 128,128,13
@@ -80,7 +80,7 @@ impl CommandType for ImportCommand {
             )
             .into());
         }
-        let compression: CompressionType = serde_json::from_str(&imp_opt.compression)
+        let compression: CompressionType = from_plain_or_json_str(&imp_opt.compression)
             .with_context(|| {
                 format!(
                     "Failed to parse new compression type: {}",

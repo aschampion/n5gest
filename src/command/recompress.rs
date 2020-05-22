@@ -8,7 +8,7 @@ pub struct RecompressOptions {
     /// Input N5 dataset
     #[structopt(name = "INPUT_DATASET")]
     input_dataset: String,
-    /// New N5 compression (JSON), e.g., '{"type": "gzip"}'
+    /// New N5 compression (optionally JSON), e.g., 'gzip' or '{"type": "gzip", "level": 2}'
     #[structopt(name = "COMPRESSION")]
     compression: String,
     /// Output N5 root path
@@ -31,7 +31,7 @@ impl CommandType for RecompressCommand {
             N5Filesystem::open(&com_opt.input_n5_path).context("Failed to open input N5")?;
         let n5_out = N5Filesystem::open_or_create(&com_opt.output_n5_path)
             .context("Failed to open or create output N5")?;
-        let compression: CompressionType = serde_json::from_str(&com_opt.compression)
+        let compression: CompressionType = from_plain_or_json_str(&com_opt.compression)
             .with_context(|| {
                 format!(
                     "Failed to parse new compression type: {}",
