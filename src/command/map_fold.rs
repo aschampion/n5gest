@@ -26,7 +26,7 @@ pub struct MapFoldCommand;
 impl CommandType for MapFoldCommand {
     type Options = MapFoldOptions;
 
-    fn run(opt: &Options, mf_opt: &Self::Options) -> Result<()> {
+    fn run(opt: &Options, mf_opt: &Self::Options) -> anyhow::Result<()> {
         let block_fold_expr: meval::Expr = mf_opt
             .block_fold_expr
             .clone()

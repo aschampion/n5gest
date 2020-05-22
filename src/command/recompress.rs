@@ -26,10 +26,18 @@ pub struct RecompressCommand;
 impl CommandType for RecompressCommand {
     type Options = RecompressOptions;
 
-    fn run(opt: &Options, com_opt: &Self::Options) -> Result<()> {
-        let n5_in = N5Filesystem::open(&com_opt.input_n5_path)?;
-        let n5_out = N5Filesystem::open_or_create(&com_opt.output_n5_path)?;
-        let compression: CompressionType = serde_json::from_str(&com_opt.compression)?;
+    fn run(opt: &Options, com_opt: &Self::Options) -> anyhow::Result<()> {
+        let n5_in =
+            N5Filesystem::open(&com_opt.input_n5_path).context("Failed to open input N5")?;
+        let n5_out = N5Filesystem::open_or_create(&com_opt.output_n5_path)
+            .context("Failed to open or create output N5")?;
+        let compression: CompressionType = serde_json::from_str(&com_opt.compression)
+            .with_context(|| {
+                format!(
+                    "Failed to parse new compression type: {}",
+                    &com_opt.compression
+                )
+            })?;
         println!("Recompressing with {}", compression);
 
         let started = Instant::now();

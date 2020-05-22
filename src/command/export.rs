@@ -57,7 +57,7 @@ pub struct ExportCommand;
 impl CommandType for ExportCommand {
     type Options = ExportOptions;
 
-    fn run(opt: &Options, exp_opt: &Self::Options) -> Result<()> {
+    fn run(opt: &Options, exp_opt: &Self::Options) -> anyhow::Result<()> {
         let n = Arc::new(N5Filesystem::open(&exp_opt.n5_path)?);
         let started = Instant::now();
 

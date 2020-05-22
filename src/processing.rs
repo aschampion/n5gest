@@ -4,6 +4,7 @@ use std::sync::{
     RwLock,
 };
 
+use anyhow::Context;
 use futures::Future;
 use futures_cpupool::{
     CpuFuture,
@@ -170,19 +171,21 @@ pub(crate) trait BlockReaderMapReduce {
         coord_iter_factory: &CI,
         pool_size: Option<usize>,
         mut arg: Self::BlockArgument,
-    ) -> Result<Self::ReduceResult>
+    ) -> anyhow::Result<Self::ReduceResult>
     where
         N5: N5Reader + Sync + Send + Clone + 'static,
         CI: CoordIteratorFactory + ?Sized,
     {
-        let data_attrs = n.get_dataset_attributes(dataset)?;
+        let data_attrs = n
+            .get_dataset_attributes(dataset)
+            .context("Failed to read dataset attributes")?;
 
         Self::setup(n, dataset, &data_attrs, &mut arg)?;
 
         let (coord_iter, total_coords) = coord_iter_factory.coord_iter(&data_attrs);
         let pbar = RwLock::new(crate::default_progress_bar(total_coords as u64));
 
-        let mut all_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
+        let mut all_jobs: Vec<CpuFuture<_, anyhow::Error>> = Vec::with_capacity(total_coords);
         let pool = match pool_size {
             Some(threads) => CpuPool::new(threads),
             None => CpuPool::new_num_cpus(),
@@ -207,13 +210,15 @@ pub(crate) trait BlockReaderMapReduce {
             let local = scoped.clone();
 
             all_jobs.push(pool.spawn_fn(move || {
+                let coord: GridCoord = coord.into();
                 let block_result = Self::map_type_dispatch(
                     &local.n,
                     &local.dataset,
                     &local.data_attrs,
-                    coord.into(),
+                    coord.clone(),
                     &local.arg,
-                )?;
+                )
+                .with_context(|| format!("Command failed for block at {:?}", coord))?;
                 local.pbar.write().unwrap().inc(1);
                 Ok(block_result)
             }));

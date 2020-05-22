@@ -33,7 +33,7 @@ pub struct DeleteUniformBlocksCommand;
 impl CommandType for DeleteUniformBlocksCommand {
     type Options = DeleteUniformBlocksOptions;
 
-    fn run(opt: &Options, dub_opt: &Self::Options) -> Result<()> {
+    fn run(opt: &Options, dub_opt: &Self::Options) -> anyhow::Result<()> {
         let n = N5Filesystem::open(&dub_opt.n5_path)?;
         let data_attrs = n.get_dataset_attributes(&dub_opt.dataset)?;
         let data_type = data_attrs.get_data_type();

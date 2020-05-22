@@ -17,7 +17,7 @@ pub struct ValidateBlocksCommand;
 impl CommandType for ValidateBlocksCommand {
     type Options = ValidateBlocksOptions;
 
-    fn run(opt: &Options, vb_opt: &Self::Options) -> Result<()> {
+    fn run(opt: &Options, vb_opt: &Self::Options) -> anyhow::Result<()> {
         let n = N5Filesystem::open(&vb_opt.n5_path)?;
         let started = Instant::now();
         let invalid = ValidateBlocks::run(

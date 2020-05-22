@@ -17,7 +17,7 @@ pub struct BenchReadCommand;
 impl CommandType for BenchReadCommand {
     type Options = BenchReadOptions;
 
-    fn run(opt: &Options, br_opt: &Self::Options) -> Result<()> {
+    fn run(opt: &Options, br_opt: &Self::Options) -> anyhow::Result<()> {
         let n = N5Filesystem::open(&br_opt.n5_path)?;
         let started = Instant::now();
         let num_bytes = BenchRead::run(

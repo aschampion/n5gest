@@ -30,7 +30,7 @@ pub struct StatCommand;
 impl CommandType for StatCommand {
     type Options = StatOptions;
 
-    fn run(opt: &Options, st_opt: &Self::Options) -> Result<()> {
+    fn run(opt: &Options, st_opt: &Self::Options) -> anyhow::Result<()> {
         let n = N5Filesystem::open(&st_opt.n5_path)?;
         let result = Stat::run(
             &n,

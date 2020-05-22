@@ -26,7 +26,7 @@ pub struct MapCommand;
 impl CommandType for MapCommand {
     type Options = MapOptions;
 
-    fn run(opt: &Options, m_opt: &Self::Options) -> Result<()> {
+    fn run(opt: &Options, m_opt: &Self::Options) -> anyhow::Result<()> {
         let map_expr: meval::Expr = m_opt.map_expr.parse().unwrap();
         let n5_in = N5Filesystem::open(&m_opt.input_n5_path)?;
         let n5_out = N5Filesystem::open_or_create(&m_opt.output_n5_path)?;

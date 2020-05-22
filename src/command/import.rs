@@ -70,16 +70,23 @@ pub struct ImportCommand;
 impl CommandType for ImportCommand {
     type Options = ImportOptions;
 
-    fn run(opt: &Options, imp_opt: &Self::Options) -> Result<()> {
+    fn run(opt: &Options, imp_opt: &Self::Options) -> anyhow::Result<()> {
         let n = Arc::new(N5Filesystem::open_or_create(&imp_opt.n5_path)?);
 
         if n.exists(&imp_opt.dataset)? {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
                 format!("Dataset {} already exists", imp_opt.dataset),
-            ));
+            )
+            .into());
         }
-        let compression: CompressionType = serde_json::from_str(&imp_opt.compression).unwrap();
+        let compression: CompressionType = serde_json::from_str(&imp_opt.compression)
+            .with_context(|| {
+                format!(
+                    "Failed to parse new compression type: {}",
+                    &imp_opt.compression
+                )
+            })?;
         let started = Instant::now();
 
         let files = imp_opt.files.as_slice();

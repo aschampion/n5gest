@@ -19,7 +19,7 @@ pub struct ListCommand;
 impl CommandType for ListCommand {
     type Options = ListOptions;
 
-    fn run(_opt: &Options, ls_opt: &Self::Options) -> Result<()> {
+    fn run(_opt: &Options, ls_opt: &Self::Options) -> anyhow::Result<()> {
         let n = N5Filesystem::open(&ls_opt.n5_path)?;
         let mut group_stack = vec![("".to_owned(), n.list("")?.into_iter())];
 

@@ -9,8 +9,6 @@ extern crate prettytable;
 #[cfg(feature = "nightly")]
 extern crate serde_plain;
 
-use std::io::Result;
-
 use indicatif::{
     ProgressBar,
     ProgressDrawTarget,
@@ -28,6 +26,7 @@ mod common {
     pub use std::sync::Arc;
     pub use std::time::Instant;
 
+    pub use anyhow::Context;
     pub use indicatif::{
         HumanBytes,
         HumanDuration,
@@ -115,7 +114,7 @@ impl std::fmt::Display for MetricPrefix {
     }
 }
 
-fn main() -> Result<()> {
+fn main() -> anyhow::Result<()> {
     let opt = Options::from_args();
 
     command::dispatch(&opt)
