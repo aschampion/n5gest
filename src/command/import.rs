@@ -168,9 +168,10 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
 ) -> Result<()> {
     let mut slab_load_jobs: Vec<CpuFuture<_, std::io::Error>> =
         Vec::with_capacity(slab_files.len());
-    slab_img_buff.write().unwrap().clear();
-    for _ in 0..slab_files.len() {
-        slab_img_buff.write().unwrap().push(None);
+    {
+        let mut buff_vec = slab_img_buff.write().unwrap();
+        buff_vec.clear();
+        buff_vec.resize(slab_files.len(), None);
     }
 
     for (i, file) in slab_files.iter().enumerate() {
