@@ -30,6 +30,7 @@ SUBCOMMANDS:
     export             Export a sequence of image files from a series of z-sections.
     help               Prints this message or the help of the given subcommand(s)
     import             Import a sequence of image files as a series of z-sections into a 3D N5 dataset.
+    import-tiff        Import a single file TIFF stack as a series of z-sections into a 3D N5 dataset
     ls                 List all datasets under an N5 root.
     map                Run simple math expressions mapping values to new datasets. For example, to clip
                        values in a dataset: `map example.n5 dataset_in example.n5 dataset_out "min(128, x)"`

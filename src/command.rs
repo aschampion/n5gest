@@ -48,6 +48,10 @@ pub(super) enum Command {
     /// N5 dataset.
     #[structopt(name = "import")]
     Import(import::ImportOptions),
+    /// Import a single file TIFF stack as a series of z-sections into a 3D
+    /// N5 dataset.
+    #[structopt(name = "import-tiff")]
+    ImportTiff(import::tiff::ImportTiffOptions),
     /// Run simple math expressions mapping values to new datasets.
     /// For example, to clip values in a dataset:
     /// `map example.n5 dataset_in example.n5 dataset_out "min(128, x)"`
@@ -94,6 +98,8 @@ pub(super) fn dispatch(opt: &Options) -> Result<()> {
             export::ExportCommand::run(opt, exp_opt)?,
         Command::Import(ref imp_opt) =>
             import::ImportCommand::run(opt, imp_opt)?,
+        Command::ImportTiff(ref imp_opt) =>
+            import::tiff::ImportTiffCommand::run(opt, imp_opt)?,
         Command::Map(ref m_opt) =>
             map::MapCommand::run(opt, m_opt)?,
         Command::MapFold(ref mf_opt) =>

@@ -21,6 +21,8 @@ use crate::iterator::{
     GridSlabCoordIter,
 };
 
+pub mod tiff;
+
 #[derive(StructOpt, Debug)]
 pub struct ImportOptions {
     /// Ouput N5 root path
