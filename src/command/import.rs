@@ -91,7 +91,7 @@ impl CommandType for ImportCommand {
 
         let files = imp_opt.files.as_slice();
         let z_dim = files.len();
-        let ref_img = image::open(&files[0]).unwrap();
+        let ref_img = image::open(&files[0])?;
         let xy_dims = ref_img.dimensions();
         let dtype = color_to_dtype(ref_img.color());
 
@@ -165,9 +165,8 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
     data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
     elide_fill_value: Option<Arc<String>>,
-) -> Result<()> {
-    let mut slab_load_jobs: Vec<CpuFuture<_, std::io::Error>> =
-        Vec::with_capacity(slab_files.len());
+) -> anyhow::Result<()> {
+    let mut slab_load_jobs: Vec<CpuFuture<_, anyhow::Error>> = Vec::with_capacity(slab_files.len());
     {
         let mut buff_vec = slab_img_buff.write().unwrap();
         buff_vec.clear();
@@ -179,7 +178,7 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
         let data_attrs = data_attrs.clone();
         let slab_img_buff = slab_img_buff.clone();
         slab_load_jobs.push(pool.spawn_fn(move || {
-            let image = image::open(&owned_file).unwrap();
+            let image = image::open(&owned_file)?;
             assert_eq!(color_to_dtype(image.color()), *data_attrs.get_data_type());
             assert_eq!(
                 u64::from(image.dimensions().0),
