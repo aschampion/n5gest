@@ -14,10 +14,6 @@ use image::{
     GenericImageView,
 };
 use n5::smallvec::smallvec;
-use n5::{
-    data_type_match,
-    data_type_rstype_replace,
-};
 
 use crate::default_progress_bar;
 use crate::iterator::{
@@ -238,36 +234,62 @@ fn slab_block_dispatch<N5>(
 where
     N5: N5Writer + Sync + Send + Clone + 'static,
 {
-    data_type_match! {
-        *data_attrs.get_data_type(),
-        {
-            let elide_fill_value: Option<RsType> = elide_fill_value.as_ref()
+    match *data_attrs.get_data_type() {
+        DataType::UINT8 => {
+            let elide_fill_value: Option<u8> = elide_fill_value
+                .as_ref()
                 .map(|v| v.parse())
                 .transpose()
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
-            slab_block_writer::<_, RsType>(
+            slab_block_writer(
                 n,
                 dataset,
                 coord,
-                slab_img_buff,
+                slab_img_buff
+                    .iter()
+                    .map(|di| di.as_ref().map(|di| di.as_luma8().unwrap())),
                 data_attrs,
                 elide_fill_value,
             )
         }
+        DataType::UINT16 => {
+            let elide_fill_value: Option<u16> = elide_fill_value
+                .as_ref()
+                .map(|v| v.parse())
+                .transpose()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+            slab_block_writer(
+                n,
+                dataset,
+                coord,
+                slab_img_buff
+                    .iter()
+                    .map(|di| di.as_ref().map(|di| di.as_luma16().unwrap())),
+                data_attrs,
+                elide_fill_value,
+            )
+        }
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Unsupported data type for import. The image library only supports u8 and u16.",
+        )),
     }
 }
 
-fn slab_block_writer<N5, T>(
+fn slab_block_writer<'a, N5, T>(
     n: &N5,
     dataset: &str,
     coord: GridCoord,
-    slab_img_buff: &[Option<DynamicImage>],
+    slab_img_buff: impl Iterator<
+        Item = Option<&'a (impl GenericImageView<Pixel = impl image::Pixel<Subpixel = T>> + 'a)>,
+    >,
     data_attrs: &DatasetAttributes,
     elide_fill_value: Option<T>,
 ) -> Result<()>
 where
     N5: N5Writer + Sync + Send + Clone + 'static,
-    T: DataTypeBounds + num_traits::AsPrimitive<u8>,
+    VecDataBlock<T>: n5::WriteableDataBlock,
+    T: DataTypeBounds + image::Primitive,
 {
     let block_loc = data_attrs
         .get_block_size()
@@ -298,13 +320,13 @@ where
             crop_block_size[1] as u32,
         );
         for (_, _, pixel) in slice.pixels() {
-            data.push(pixel[0]);
+            data.push(pixel.channels()[0]);
         }
     }
 
     if let Some(fill_value) = elide_fill_value {
         // TODO: bad cast necessary until due to limited DynamicImage type support.
-        if data.iter().all(|&v| v == fill_value.as_()) {
+        if data.iter().all(|&v| v == fill_value) {
             return Ok(());
         }
     }
