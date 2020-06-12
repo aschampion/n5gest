@@ -195,6 +195,8 @@ impl<'a> image::ImageDecoder<'a> for ImageBuffer {
         let buf = match self.buffer {
             tiff::decoder::DecodingResult::U8(v) => v,
             tiff::decoder::DecodingResult::U16(v) => vec_u16_into_u8(v),
+            tiff::decoder::DecodingResult::U32(_) => return Err(err_unknown_color_type(32)),
+            tiff::decoder::DecodingResult::U64(_) => return Err(err_unknown_color_type(64)),
         };
 
         Ok(std::io::Cursor::new(buf))
@@ -209,9 +211,20 @@ impl<'a> image::ImageDecoder<'a> for ImageBuffer {
             tiff::decoder::DecodingResult::U16(v) => {
                 NativeEndian::write_u16_into(&v, buf);
             }
+            tiff::decoder::DecodingResult::U32(_) => return Err(err_unknown_color_type(32)),
+            tiff::decoder::DecodingResult::U64(_) => return Err(err_unknown_color_type(64)),
         }
         Ok(())
     }
+}
+
+// TODO: this duplicates functionality from `image` that it should eventually
+// make more transparent.
+fn err_unknown_color_type(value: u8) -> image::ImageError {
+    image::ImageError::Unsupported(image::error::UnsupportedError::from_format_and_kind(
+        image::ImageFormat::Tiff.into(),
+        image::error::UnsupportedErrorKind::Color(image::ExtendedColorType::Unknown(value)),
+    ))
 }
 
 // TODO: this duplicates functionality from `image` that it should eventually
