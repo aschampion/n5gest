@@ -5,6 +5,24 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 
+## [0.3.2] - 2020-06-12
+### Fixed
+- `import` supports 16-bit images.
+- Correct max block coordinates in `stat`.
+- Several upstream bugs corrupting some PNGs and TIFFs during import have been
+  fixed.
+- Error reporting improved.
+
+### Added
+- New command: `import-tiff`. Imports single file tiff stacks.
+- Many commands now accept options that bound their operation to slabs along
+  particular axes. See help for the `--slab-axis` and `--slab-coord` options.
+
+### Changed
+- `ls` sorts printed paths lexicographically.
+- Compression options can be passed via simple strings like `gzip`, which use
+  default parameters.
+
 ## [0.3.1] - 2020-01-18
 ### Fixed
 - Fixed some cases of corruption when PNGs are exported. However, some errors
