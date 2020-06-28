@@ -38,7 +38,7 @@ pub struct CastCommand;
 impl CommandType for CastCommand {
     type Options = CastOptions;
 
-    fn run(opt: &Options, cast_opt: &Self::Options) -> Result<()> {
+    fn run(opt: &Options, cast_opt: &Self::Options) -> anyhow::Result<()> {
         let n5_in = N5Filesystem::open(&cast_opt.input_n5_path)?;
         let n5_out = N5Filesystem::open_or_create(&cast_opt.output_n5_path)?;
         let data_type: DataType = serde_plain::from_str(&cast_opt.data_type_name).unwrap();
@@ -77,7 +77,7 @@ fn dispatch_cast<N5, CI>(
     coord_iter_factory: &CI,
     pool_size: Option<usize>,
     arg: CastArguments<N5>,
-) -> Result<usize>
+) -> anyhow::Result<usize>
 where
     N5: N5Writer + Sync + Send + Clone + 'static,
     CI: CoordIteratorFactory + ?Sized,
