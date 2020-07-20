@@ -1,10 +1,5 @@
 use crate::common::*;
 
-use std::convert::{
-    TryFrom,
-    TryInto,
-};
-
 use n5::{
     data_type_match,
     data_type_rstype_replace,
@@ -115,37 +110,11 @@ where
     N5O: N5Writer + Sync + Send + Clone + 'static,
     T: DataTypeBounds,
     TO: DataTypeBounds,
+    VecDataBlock<TO>: n5::WriteableDataBlock,
 {
     type BlockArgument = <Self as BlockReaderMapReduce>::BlockArgument;
     type BlockResult = <Self as BlockReaderMapReduce>::BlockResult;
 
-    default fn map<N5>(
-        _n: &N5,
-        _dataset: &str,
-        _data_attrs: &DatasetAttributes,
-        _coord: GridCoord,
-        _block_opt: Result<Option<&VecDataBlock<T>>>,
-        _arg: &Self::BlockArgument,
-    ) -> Result<Self::BlockResult>
-    where
-        N5: N5Reader + Sync + Send + Clone + 'static,
-    {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Imcompatible cast types",
-        ))
-    }
-}
-
-impl<N5O, TO, T> BlockTypeMap<T> for Cast<N5O, TO>
-where
-    N5O: N5Writer + Sync + Send + Clone + 'static,
-    T: DataTypeBounds,
-    TO: DataTypeBounds,
-    VecDataBlock<TO>: n5::WriteableDataBlock,
-    TO: TryFrom<T>,
-    <TO as TryFrom<T>>::Error: std::fmt::Debug,
-{
     fn map<N5>(
         _n: &N5,
         _dataset: &str,
@@ -163,8 +132,8 @@ where
                     .get_data()
                     .iter()
                     .cloned()
-                    .map(|v| v.try_into())
-                    .collect::<std::result::Result<Vec<TO>, _>>()
+                    .map(|v| TO::from(v))
+                    .collect::<Option<Vec<TO>>>()
                     .expect("Value cannot be converted");
                 let cast_block = VecDataBlock::<TO>::new(
                     block.get_size().into(),
@@ -189,6 +158,7 @@ impl<N5O, TO> BlockReaderMapReduce for Cast<N5O, TO>
 where
     N5O: N5Writer + Sync + Send + Clone + 'static,
     TO: DataTypeBounds,
+    VecDataBlock<TO>: n5::WriteableDataBlock,
 {
     type BlockResult = usize;
     type BlockArgument = CastArguments<N5O>;

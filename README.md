@@ -24,6 +24,7 @@ OPTIONS:
 
 SUBCOMMANDS:
     bench-read         Benchmark reading an entire dataset.
+    cast               Cast an existing dataset into a new dataset with a given data type.
     crop-blocks        Crop wrongly sized blocks to match dataset dimensions at the end of a given axis.
     delete-uniform-blocks
                        Delete blocks uniformly filled with a given value, such as empty blocks.
@@ -40,15 +41,6 @@ SUBCOMMANDS:
     recompress         Recompress an existing dataset into a new dataset with a given compression.
     stat               Retrieve metadata about the number of blocks that exists and their timestamps.
     validate-blocks    Report malformed blocks.
-```
-
-Additional subcommands are available when using the `nightly` feature flag:
-
-```sh
-$ cargo +nightly install n5gest --features nightly
-```
-```sh
-    cast               Cast an existing dataset into a new dataset with a given data type.
 ```
 
 ## License

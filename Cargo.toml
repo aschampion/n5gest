@@ -10,9 +10,6 @@ repository = "https://github.com/aschampion/n5gest"
 keywords = ["n5", "tensor"]
 categories = ["command-line-utilities", "filesystem", "science"]
 
-[features]
-nightly = []
-
 [dependencies]
 anyhow = "1.0"
 byteorder = "1.3"

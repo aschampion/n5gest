@@ -4,7 +4,6 @@ use structopt::StructOpt;
 use super::Options;
 
 mod bench_read;
-#[cfg(feature = "nightly")]
 mod cast;
 mod crop_blocks;
 mod delete_uniform_blocks;
@@ -31,7 +30,6 @@ pub(super) enum Command {
     BenchRead(bench_read::BenchReadOptions),
     /// Cast an existing dataset into a new dataset with a given
     /// data type.
-    #[cfg(feature = "nightly")]
     #[structopt(name = "cast")]
     Cast(cast::CastOptions),
     /// Crop wrongly sized blocks to match dataset dimensions at the end of a
@@ -87,7 +85,6 @@ pub(super) fn dispatch(opt: &Options) -> Result<()> {
             stat::StatCommand::run(opt, st_opt)?,
         Command::BenchRead(ref br_opt) =>
             bench_read::BenchReadCommand::run(opt, br_opt)?,
-        #[cfg(feature = "nightly")]
         Command::Cast(ref cast_opt) =>
             cast::CastCommand::run(opt, cast_opt)?,
         Command::CropBlocks(ref crop_opt) =>
