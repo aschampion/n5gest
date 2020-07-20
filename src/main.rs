@@ -2,16 +2,14 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 #![forbid(unsafe_code)]
 
-#[macro_use]
-extern crate num_derive;
-#[macro_use]
-extern crate prettytable;
-extern crate serde_plain;
-
 use indicatif::{
     ProgressBar,
     ProgressDrawTarget,
     ProgressStyle,
+};
+use num_derive::{
+    FromPrimitive,
+    ToPrimitive,
 };
 use num_traits::{
     FromPrimitive,
@@ -31,6 +29,10 @@ mod common {
         HumanDuration,
     };
     pub use n5::prelude::*;
+    pub use prettytable::{
+        cell,
+        row,
+    };
     pub use structopt::StructOpt;
 
     pub(crate) use crate::{
