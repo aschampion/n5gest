@@ -7,7 +7,7 @@ Written in Rust using the [Rust N5 crate](https://crates.io/crates/n5).
 ```console
 $ cargo install n5gest
 $ n5gest -h
-n5gest 0.3.3
+n5gest 0.3.4
 Andrew Champion <andrew.champion@gmail.com>
 Utilities for N5 files.
 
