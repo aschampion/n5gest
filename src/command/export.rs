@@ -170,8 +170,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
     let slab_z = slab_coord as u64 * u64::from(data_attrs.get_block_size()[2]);
     let mut slab_min_i = *min_vox;
     let mut slab_max_i = *max_vox;
-    slab_min_i[2] = std::cmp::max(min_vox[2] - slab_z, 0);
-    // let slab_min = min[2].checked_sub(slab_z).unwrap_or(0);
+    slab_min_i[2] = min_vox[2].checked_sub(slab_z).unwrap_or(0);
     slab_max_i[2] = min(
         max_vox[2] - slab_z,
         u64::from(data_attrs.get_block_size()[2]),
