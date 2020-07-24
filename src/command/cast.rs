@@ -132,7 +132,7 @@ where
                     .get_data()
                     .iter()
                     .cloned()
-                    .map(|v| TO::from(v))
+                    .map(TO::from)
                     .collect::<Option<Vec<TO>>>()
                     .expect("Value cannot be converted");
                 let cast_block = VecDataBlock::<TO>::new(
