@@ -58,7 +58,14 @@ impl CommandType for ExportCommand {
         let n = Arc::new(N5Filesystem::open(&exp_opt.n5_path)?);
         let started = Instant::now();
 
-        let data_attrs = Arc::new(n.get_dataset_attributes(&exp_opt.dataset)?);
+        let data_attrs = Arc::new(n.get_dataset_attributes(&exp_opt.dataset).with_context(
+            || {
+                format!(
+                    "Failed to read dataset attributes ({}): {}",
+                    &exp_opt.n5_path, &exp_opt.dataset
+                )
+            },
+        )?);
         let slab_size = u64::from(data_attrs.get_block_size()[2]);
 
         let min = [

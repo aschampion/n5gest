@@ -21,7 +21,12 @@ impl CommandType for ListCommand {
 
     fn run(_opt: &Options, ls_opt: &Self::Options) -> anyhow::Result<()> {
         let n = N5Filesystem::open(&ls_opt.n5_path)?;
-        let mut group_stack = vec![("".to_owned(), n.list("")?.into_iter())];
+        let mut group_stack = vec![(
+            "".to_owned(),
+            n.list("")
+                .with_context(|| format!("Failed to list container root: {}", &ls_opt.n5_path))?
+                .into_iter(),
+        )];
 
         let mut datasets = HashMap::new();
 
