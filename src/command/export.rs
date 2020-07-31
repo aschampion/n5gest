@@ -3,11 +3,7 @@ use crate::common::*;
 use std::cmp::min;
 use std::sync::RwLock;
 
-use futures::{
-    executor::ThreadPool,
-    future::RemoteHandle,
-    task::SpawnExt,
-};
+use futures::executor::ThreadPool;
 use n5::WriteableDataBlock;
 use n5::{
     data_type_match,
@@ -20,6 +16,7 @@ use crate::iterator::{
     CoordIteratorFactory,
     VoxelBoundedSlabCoordIter,
 };
+use crate::pool::pool_execute;
 
 #[derive(StructOpt, Debug)]
 pub struct ExportOptions {
@@ -167,8 +164,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
         min: (&min_vox[..]).into(),
         max: (&max_vox[..]).into(),
     };
-    let (slab_coord_iter, total_coords) = coord_iter.coord_iter(&*data_attrs);
-    let mut slab_coord_jobs: Vec<RemoteHandle<Result<_>>> = Vec::with_capacity(total_coords);
+    let slab_coord_iter = coord_iter.coord_iter(&*data_attrs);
 
     let slab_z = slab_coord as u64 * u64::from(data_attrs.get_block_size()[2]);
     let mut slab_min_i = *min_vox;
@@ -190,53 +186,53 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
         slab_max_i[2] as usize,
     ];
 
-    for coord in slab_coord_iter {
-        let n = n.clone();
-        let dataset = dataset.clone();
-        let slab_img_buff = slab_img_buff.clone();
-        let data_attrs = data_attrs.clone();
-        slab_coord_jobs.push(pool.spawn_with_handle(async move {
-            slab_block_dispatch(
-                &*n,
-                &*dataset,
-                coord.into(),
-                &slab_img_buff,
-                &*data_attrs,
-                &slab_min,
-                &slab_max,
-            )
-        })?);
-    }
+    pool_execute(
+        pool,
+        slab_coord_iter.map(|coord| {
+            let n = n.clone();
+            let dataset = dataset.clone();
+            let slab_img_buff = slab_img_buff.clone();
+            let data_attrs = data_attrs.clone();
 
-    futures::executor::block_on(futures::future::try_join_all(slab_coord_jobs))?;
+            async move {
+                slab_block_dispatch(
+                    &*n,
+                    &*dataset,
+                    coord.into(),
+                    &slab_img_buff,
+                    &*data_attrs,
+                    &slab_min,
+                    &slab_max,
+                )
+            }
+        }),
+    )?;
 
-    let mut slab_load_jobs: Vec<RemoteHandle<Result<_>>> =
-        Vec::with_capacity(slab_max[2] - slab_min[2]);
+    pool_execute::<std::io::Error, _, _, _>(
+        pool,
+        (slab_min[2]..slab_max[2]).map(|slab_ind| {
+            let data_attrs = data_attrs.clone();
+            let slab_img_buff = slab_img_buff.clone();
+            let mut params = std::collections::HashMap::new();
+            params.insert("z".into(), slab_z as usize + slab_ind);
+            let filename = file_format.format(&params).unwrap();
 
-    for slab_ind in slab_min[2]..slab_max[2] {
-        let data_attrs = data_attrs.clone();
-        let slab_img_buff = slab_img_buff.clone();
-        let mut params = std::collections::HashMap::new();
-        params.insert("z".into(), slab_z as usize + slab_ind);
-        let filename = file_format.format(&params).unwrap();
+            let width = (max_vox[0] - min_vox[0]) as u32;
+            let height = (max_vox[1] - min_vox[1]) as u32;
+            async move {
+                image::save_buffer(
+                    filename,
+                    &slab_img_buff[slab_ind as usize].read().unwrap(),
+                    width,
+                    height,
+                    dtype_to_color(*data_attrs.get_data_type()),
+                )
+                .unwrap();
 
-        let width = (max_vox[0] - min_vox[0]) as u32;
-        let height = (max_vox[1] - min_vox[1]) as u32;
-        slab_load_jobs.push(pool.spawn_with_handle(async move {
-            image::save_buffer(
-                filename,
-                &slab_img_buff[slab_ind as usize].read().unwrap(),
-                width,
-                height,
-                dtype_to_color(*data_attrs.get_data_type()),
-            )
-            .unwrap();
-
-            Ok(())
-        })?);
-    }
-
-    futures::executor::block_on(futures::future::try_join_all(slab_load_jobs))?;
+                Ok(())
+            }
+        }),
+    )?;
 
     Ok(())
 }

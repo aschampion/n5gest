@@ -9,7 +9,7 @@ pub(crate) trait CoordIteratorFactory {
     fn coord_iter(
         &self,
         data_attrs: &DatasetAttributes,
-    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize);
+    ) -> Box<dyn ExactSizeIterator<Item = Vec<u64>>>;
 }
 
 pub(crate) struct DefaultCoordIter {}
@@ -18,11 +18,10 @@ impl CoordIteratorFactory for DefaultCoordIter {
     fn coord_iter(
         &self,
         data_attrs: &DatasetAttributes,
-    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
+    ) -> Box<dyn ExactSizeIterator<Item = Vec<u64>>> {
         let coord_iter = data_attrs.coord_iter();
-        let total_coords = coord_iter.len();
 
-        (Box::new(coord_iter), total_coords)
+        Box::new(coord_iter)
     }
 }
 
@@ -37,7 +36,7 @@ impl CoordIteratorFactory for VoxelBoundedSlabCoordIter {
     fn coord_iter(
         &self,
         data_attrs: &DatasetAttributes,
-    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
+    ) -> Box<dyn ExactSizeIterator<Item = Vec<u64>>> {
         // Necessary for moving into closures.
 
         let axis = self.axis;
@@ -56,23 +55,50 @@ impl CoordIteratorFactory for VoxelBoundedSlabCoordIter {
             .map(|(&d, &s)| d / u64::from(s))
             .collect::<Vec<_>>();
         coord_floor.remove(axis as usize);
-        let total_coords = coord_floor
-            .iter()
-            .zip(coord_ceil.iter())
-            .map(|(&min, &max)| max - min)
-            .product::<u64>() as usize;
 
-        let iter = coord_ceil
-            .into_iter()
-            .zip(coord_floor.into_iter())
-            .map(|(c, f)| f..c)
-            .multi_cartesian_product()
-            .map(move |mut c| {
-                c.insert(axis as usize, slab_coord);
-                c
-            });
+        let iter = CoordRangeIterator::new(
+            coord_ceil
+                .into_iter()
+                .zip(coord_floor.into_iter())
+                .map(|(c, f)| f..c),
+        )
+        .map(move |mut c| {
+            c.insert(axis as usize, slab_coord);
+            c
+        });
 
-        (Box::new(iter), total_coords)
+        Box::new(iter)
+    }
+}
+
+/// A wrapper around `itertool`'s `MultiProduct` for a coordinate iterator
+/// implementing `ExactSizeIterator`.
+pub(crate) struct CoordRangeIterator {
+    len: usize,
+    mcp: itertools::structs::MultiProduct<std::ops::Range<u64>>,
+}
+
+impl CoordRangeIterator {
+    /// Construct from an iterator over ranges for each axis.
+    pub fn new(iter: impl Iterator<Item = std::ops::Range<u64>> + Clone) -> Self {
+        Self {
+            len: iter.clone().map(|r| r.end - r.start).product::<u64>() as usize,
+            mcp: iter.multi_cartesian_product(),
+        }
+    }
+}
+
+impl Iterator for CoordRangeIterator {
+    type Item = Vec<u64>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.mcp.next()
+    }
+}
+
+impl ExactSizeIterator for CoordRangeIterator {
+    fn len(&self) -> usize {
+        self.len
     }
 }
 
@@ -85,7 +111,7 @@ impl CoordIteratorFactory for GridSlabCoordIter {
     fn coord_iter(
         &self,
         data_attrs: &DatasetAttributes,
-    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
+    ) -> Box<dyn ExactSizeIterator<Item = Vec<u64>>> {
         VoxelBoundedSlabCoordIter {
             axis: self.axis,
             slab_coord: self.slab_coord,

@@ -54,6 +54,7 @@ mod common {
     }
 }
 mod iterator;
+mod pool;
 mod processing;
 
 /// Utilities for N5 files.

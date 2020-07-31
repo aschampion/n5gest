@@ -10,11 +10,7 @@ use byteorder::{
     ByteOrder,
     NativeEndian,
 };
-use futures::{
-    executor::ThreadPool,
-    future::RemoteHandle,
-    task::SpawnExt,
-};
+use futures::executor::ThreadPool;
 use image::{
     DynamicImage,
     GenericImageView,
@@ -27,6 +23,7 @@ use crate::iterator::{
     CoordIteratorFactory,
     GridSlabCoordIter,
 };
+use crate::pool::pool_execute;
 
 use super::{
     color_to_dtype,
@@ -332,63 +329,65 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
     slab_coord: usize,
     elide_fill_value: Option<Arc<String>>,
 ) -> anyhow::Result<()> {
-    let mut slab_load_jobs: Vec<RemoteHandle<anyhow::Result<_>>> = Vec::with_capacity(slab.len());
     {
         let mut buff_vec = slab_img_buff.write().unwrap();
         buff_vec.clear();
         buff_vec.resize(slab.len(), None);
     }
 
-    for (i, coord) in slab.enumerate() {
-        let mut tiff = tiff.clone();
-        let data_attrs = data_attrs.clone();
-        let slab_img_buff = slab_img_buff.clone();
-        slab_load_jobs.push(pool.spawn_with_handle(async move {
-            let image = tiff.read_image_index(coord)?;
-            assert_eq!(color_to_dtype(image.color()), *data_attrs.get_data_type());
-            assert_eq!(
-                u64::from(image.dimensions().0),
-                data_attrs.get_dimensions()[0]
-            );
-            assert_eq!(
-                u64::from(image.dimensions().1),
-                data_attrs.get_dimensions()[1]
-            );
-            slab_img_buff.write().unwrap()[i] = Some(image);
+    pool_execute::<anyhow::Error, _, _, _>(
+        pool,
+        slab.enumerate().map(|(i, coord)| {
+            let mut tiff = tiff.clone();
+            let data_attrs = data_attrs.clone();
+            let slab_img_buff = slab_img_buff.clone();
 
-            Ok(())
-        })?);
-    }
+            async move {
+                let image = tiff.read_image_index(coord)?;
+                assert_eq!(color_to_dtype(image.color()), *data_attrs.get_data_type());
+                assert_eq!(
+                    u64::from(image.dimensions().0),
+                    data_attrs.get_dimensions()[0]
+                );
+                assert_eq!(
+                    u64::from(image.dimensions().1),
+                    data_attrs.get_dimensions()[1]
+                );
+                slab_img_buff.write().unwrap()[i] = Some(image);
 
-    futures::executor::block_on(futures::future::try_join_all(slab_load_jobs))?;
+                Ok(())
+            }
+        }),
+    )?;
 
     let coord_iter = GridSlabCoordIter {
         axis: 2,
         slab_coord: slab_coord as u64,
     };
-    let (slab_coord_iter, total_coords) = coord_iter.coord_iter(&*data_attrs);
-    let mut slab_coord_jobs: Vec<RemoteHandle<Result<_>>> = Vec::with_capacity(total_coords);
+    let slab_coord_iter = coord_iter.coord_iter(&*data_attrs);
 
-    for coord in slab_coord_iter {
-        let n = n.clone();
-        let dataset = dataset.clone();
-        let slab_img_buff = slab_img_buff.clone();
-        let data_attrs = data_attrs.clone();
-        let elide_fill_value = elide_fill_value.clone();
-        slab_coord_jobs.push(pool.spawn_with_handle(async move {
-            let slab_read = slab_img_buff.read().unwrap();
-            slab_block_dispatch(
-                &*n,
-                &*dataset,
-                coord.into(),
-                &slab_read,
-                &*data_attrs,
-                elide_fill_value,
-            )
-        })?);
-    }
+    pool_execute(
+        pool,
+        slab_coord_iter.map(|coord| {
+            let n = n.clone();
+            let dataset = dataset.clone();
+            let slab_img_buff = slab_img_buff.clone();
+            let data_attrs = data_attrs.clone();
+            let elide_fill_value = elide_fill_value.clone();
 
-    futures::executor::block_on(futures::future::try_join_all(slab_coord_jobs))?;
+            async move {
+                let slab_read = slab_img_buff.read().unwrap();
+                slab_block_dispatch(
+                    &*n,
+                    &*dataset,
+                    coord.into(),
+                    &slab_read,
+                    &*data_attrs,
+                    elide_fill_value,
+                )
+            }
+        }),
+    )?;
 
     Ok(())
 }

@@ -1,9 +1,11 @@
 use crate::common::*;
 
-use itertools::Itertools;
 use n5::ndarray::prelude::*;
 
-use crate::iterator::CoordIteratorFactory;
+use crate::iterator::{
+    CoordIteratorFactory,
+    CoordRangeIterator,
+};
 
 #[derive(StructOpt, Debug)]
 pub struct CropBlocksOptions {
@@ -76,7 +78,7 @@ impl CoordIteratorFactory for AxisPositiveExtentFaceCoordIteratorFactory {
     fn coord_iter(
         &self,
         data_attrs: &DatasetAttributes,
-    ) -> (Box<dyn Iterator<Item = Vec<u64>>>, usize) {
+    ) -> Box<dyn ExactSizeIterator<Item = Vec<u64>>> {
         let axis = self.axis;
         let mut coord_ceil = data_attrs
             .get_dimensions()
@@ -85,17 +87,13 @@ impl CoordIteratorFactory for AxisPositiveExtentFaceCoordIteratorFactory {
             .map(|(&d, &s)| (d + u64::from(s) - 1) / u64::from(s))
             .collect::<Vec<_>>();
         let axis_ceil = coord_ceil.remove(axis as usize);
-        let total_coords = coord_ceil.iter().product::<u64>() as usize;
-        let coord_iter = coord_ceil
-            .into_iter()
-            .map(|c| 0..c)
-            .multi_cartesian_product()
-            .map(move |mut c| {
+        let coord_iter =
+            CoordRangeIterator::new(coord_ceil.into_iter().map(|c| 0..c)).map(move |mut c| {
                 c.insert(axis as usize, axis_ceil - 1);
                 c
             });
 
-        (Box::new(coord_iter), total_coords)
+        Box::new(coord_iter)
     }
 }
 

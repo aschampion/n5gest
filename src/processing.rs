@@ -5,11 +5,7 @@ use std::sync::{
 };
 
 use anyhow::Context;
-use futures::{
-    executor::ThreadPool,
-    future::RemoteHandle,
-    task::SpawnExt,
-};
+use futures::executor::ThreadPool;
 use indicatif::ProgressBar;
 use n5::prelude::*;
 use n5::{
@@ -18,6 +14,7 @@ use n5::{
 };
 
 use crate::iterator::CoordIteratorFactory;
+use crate::pool::pool_execute;
 
 /// Convience trait combined all the required traits on data types until trait
 /// aliases are stabilized.
@@ -182,8 +179,8 @@ pub(crate) trait BlockReaderMapReduce {
 
         Self::setup(n, dataset, &data_attrs, &mut arg)?;
 
-        let (coord_iter, total_coords) = coord_iter_factory.coord_iter(&data_attrs);
-        let pbar = RwLock::new(crate::default_progress_bar(total_coords as u64));
+        let coord_iter = coord_iter_factory.coord_iter(&data_attrs);
+        let pbar = RwLock::new(crate::default_progress_bar(coord_iter.len() as u64));
 
         let pool = {
             let mut builder = ThreadPool::builder();
@@ -208,26 +205,26 @@ pub(crate) trait BlockReaderMapReduce {
             arg,
         });
 
-        let mut all_jobs: Vec<RemoteHandle<anyhow::Result<_>>> = Vec::with_capacity(total_coords);
-        for coord in coord_iter {
-            let local = scoped.clone();
+        let block_results = pool_execute::<anyhow::Error, _, _, _>(
+            &pool,
+            coord_iter.map(|coord| {
+                let local = scoped.clone();
 
-            all_jobs.push(pool.spawn_with_handle(async move {
-                let coord: GridCoord = coord.into();
-                let block_result = Self::map_type_dispatch(
-                    &local.n,
-                    &local.dataset,
-                    &local.data_attrs,
-                    coord.clone(),
-                    &local.arg,
-                )
-                .with_context(|| format!("Command failed for block at {:?}", coord))?;
-                local.pbar.write().unwrap().inc(1);
-                Ok(block_result)
-            })?);
-        }
-
-        let block_results = futures::executor::block_on(futures::future::try_join_all(all_jobs))?;
+                async move {
+                    let coord: GridCoord = coord.into();
+                    let block_result = Self::map_type_dispatch(
+                        &local.n,
+                        &local.dataset,
+                        &local.data_attrs,
+                        coord.clone(),
+                        &local.arg,
+                    )
+                    .with_context(|| format!("Command failed for block at {:?}", coord))?;
+                    local.pbar.write().unwrap().inc(1);
+                    Ok(block_result)
+                }
+            }),
+        )?;
 
         scoped.pbar.write().unwrap().finish();
         Ok(Self::reduce(&scoped.data_attrs, block_results, &scoped.arg))
