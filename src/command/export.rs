@@ -26,7 +26,7 @@ pub struct ExportOptions {
     /// Input N5 dataset
     #[structopt(name = "DATASET")]
     dataset: String,
-    /// Format string for output filename
+    /// Format string for output filename, e.g., 'section_{z}.png'
     #[structopt(name = "FILE_FORMAT")]
     file_format: String,
     /// Minimum X for export (inclusive)
