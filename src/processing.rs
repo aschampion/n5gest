@@ -103,7 +103,7 @@ pub(crate) trait BlockReaderMapReduce {
     type BlockArgument: Send + Sync + 'static;
     type ReduceResult;
     // TODO: When associated type default stabilize, `Map` should default to
-    // `Self`.
+    // `Self`. Tracking issue: https://github.com/rust-lang/rust/issues/29661
     type Map: BlockMap<Self::BlockResult, Self::BlockArgument>;
 
     fn setup<N5>(
