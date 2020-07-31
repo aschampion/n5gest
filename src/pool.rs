@@ -6,7 +6,6 @@ use futures::{
     future::{
         try_join_all,
         Future,
-        RemoteHandle,
     },
     task::SpawnExt,
 };
@@ -20,11 +19,9 @@ where
     anyhow::Error: From<E>,
     V: 'static,
 {
-    let mut all_jobs: Vec<RemoteHandle<Result<V, E>>> = Vec::with_capacity(iter.len());
+    let jobs = iter
+        .map(|job| pool.spawn_with_handle(job))
+        .collect::<Result<Vec<_>, _>>()?;
 
-    for job in iter {
-        all_jobs.push(pool.spawn_with_handle(job)?);
-    }
-
-    Ok(block_on(try_join_all(all_jobs))?)
+    Ok(block_on(try_join_all(jobs))?)
 }
