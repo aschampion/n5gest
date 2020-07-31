@@ -5,10 +5,10 @@ use std::sync::{
 };
 
 use anyhow::Context;
-use futures::Future;
-use futures_cpupool::{
-    CpuFuture,
-    CpuPool,
+use futures::{
+    executor::ThreadPool,
+    future::RemoteHandle,
+    task::SpawnExt,
 };
 use indicatif::ProgressBar;
 use n5::prelude::*;
@@ -185,10 +185,12 @@ pub(crate) trait BlockReaderMapReduce {
         let (coord_iter, total_coords) = coord_iter_factory.coord_iter(&data_attrs);
         let pbar = RwLock::new(crate::default_progress_bar(total_coords as u64));
 
-        let mut all_jobs: Vec<CpuFuture<_, anyhow::Error>> = Vec::with_capacity(total_coords);
-        let pool = match pool_size {
-            Some(threads) => CpuPool::new(threads),
-            None => CpuPool::new_num_cpus(),
+        let pool = {
+            let mut builder = ThreadPool::builder();
+            if let Some(threads) = pool_size {
+                builder.pool_size(threads);
+            }
+            builder.create()?
         };
 
         struct Scoped<N5, BlockArgument> {
@@ -206,10 +208,11 @@ pub(crate) trait BlockReaderMapReduce {
             arg,
         });
 
+        let mut all_jobs: Vec<RemoteHandle<anyhow::Result<_>>> = Vec::with_capacity(total_coords);
         for coord in coord_iter {
             let local = scoped.clone();
 
-            all_jobs.push(pool.spawn_fn(move || {
+            all_jobs.push(pool.spawn_with_handle(async move {
                 let coord: GridCoord = coord.into();
                 let block_result = Self::map_type_dispatch(
                     &local.n,
@@ -221,10 +224,10 @@ pub(crate) trait BlockReaderMapReduce {
                 .with_context(|| format!("Command failed for block at {:?}", coord))?;
                 local.pbar.write().unwrap().inc(1);
                 Ok(block_result)
-            }));
+            })?);
         }
 
-        let block_results = futures::future::join_all(all_jobs).wait()?;
+        let block_results = futures::executor::block_on(futures::future::try_join_all(all_jobs))?;
 
         scoped.pbar.write().unwrap().finish();
         Ok(Self::reduce(&scoped.data_attrs, block_results, &scoped.arg))

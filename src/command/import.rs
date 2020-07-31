@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::RwLock;
 
-use futures::Future;
-use futures_cpupool::{
-    CpuFuture,
-    CpuPool,
+use futures::{
+    executor::ThreadPool,
+    future::RemoteHandle,
+    task::SpawnExt,
 };
 use image::{
     DynamicImage,
@@ -108,9 +108,12 @@ impl CommandType for ImportCommand {
             slab_size,
         )));
 
-        let pool = match opt.threads {
-            Some(threads) => CpuPool::new(threads),
-            None => CpuPool::new_num_cpus(),
+        let pool = {
+            let mut builder = ThreadPool::builder();
+            if let Some(threads) = opt.threads {
+                builder.pool_size(threads);
+            }
+            builder.create()?
         };
         let pbar = RwLock::new(default_progress_bar(files.len() as u64));
         let elide_fill_value = imp_opt.elide_fill_value.clone().map(Arc::new);
@@ -157,14 +160,15 @@ fn color_to_dtype(color: image::ColorType) -> DataType {
 fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
     n: &Arc<N5>,
     dataset: &Arc<String>,
-    pool: &CpuPool,
+    pool: &ThreadPool,
     slab_img_buff: &Arc<RwLock<Vec<Option<DynamicImage>>>>,
     slab_files: &[PathBuf],
     data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
     elide_fill_value: Option<Arc<String>>,
 ) -> anyhow::Result<()> {
-    let mut slab_load_jobs: Vec<CpuFuture<_, anyhow::Error>> = Vec::with_capacity(slab_files.len());
+    let mut slab_load_jobs: Vec<RemoteHandle<anyhow::Result<_>>> =
+        Vec::with_capacity(slab_files.len());
     {
         let mut buff_vec = slab_img_buff.write().unwrap();
         buff_vec.clear();
@@ -175,7 +179,7 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
         let owned_file = file.clone();
         let data_attrs = data_attrs.clone();
         let slab_img_buff = slab_img_buff.clone();
-        slab_load_jobs.push(pool.spawn_fn(move || {
+        slab_load_jobs.push(pool.spawn_with_handle(async move {
             let image = image::open(&owned_file)?;
             assert_eq!(color_to_dtype(image.color()), *data_attrs.get_data_type());
             assert_eq!(
@@ -189,17 +193,17 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
             slab_img_buff.write().unwrap()[i] = Some(image);
 
             Ok(())
-        }));
+        })?);
     }
 
-    futures::future::join_all(slab_load_jobs).wait()?;
+    futures::executor::block_on(futures::future::try_join_all(slab_load_jobs))?;
 
     let coord_iter = GridSlabCoordIter {
         axis: 2,
         slab_coord: slab_coord as u64,
     };
     let (slab_coord_iter, total_coords) = coord_iter.coord_iter(&*data_attrs);
-    let mut slab_coord_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
+    let mut slab_coord_jobs: Vec<RemoteHandle<Result<_>>> = Vec::with_capacity(total_coords);
 
     for coord in slab_coord_iter {
         let n = n.clone();
@@ -207,7 +211,7 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
         let slab_img_buff = slab_img_buff.clone();
         let data_attrs = data_attrs.clone();
         let elide_fill_value = elide_fill_value.clone();
-        slab_coord_jobs.push(pool.spawn_fn(move || {
+        slab_coord_jobs.push(pool.spawn_with_handle(async move {
             let slab_read = slab_img_buff.read().unwrap();
             slab_block_dispatch(
                 &*n,
@@ -217,10 +221,10 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
                 &*data_attrs,
                 elide_fill_value,
             )
-        }));
+        })?);
     }
 
-    futures::future::join_all(slab_coord_jobs).wait()?;
+    futures::executor::block_on(futures::future::try_join_all(slab_coord_jobs))?;
 
     Ok(())
 }

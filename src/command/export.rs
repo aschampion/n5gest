@@ -3,10 +3,10 @@ use crate::common::*;
 use std::cmp::min;
 use std::sync::RwLock;
 
-use futures::Future;
-use futures_cpupool::{
-    CpuFuture,
-    CpuPool,
+use futures::{
+    executor::ThreadPool,
+    future::RemoteHandle,
+    task::SpawnExt,
 };
 use n5::WriteableDataBlock;
 use n5::{
@@ -96,9 +96,12 @@ impl CommandType for ExportCommand {
         }
         let slab_img_buff = slab_img_buff.into();
 
-        let pool = match opt.threads {
-            Some(threads) => CpuPool::new(threads),
-            None => CpuPool::new_num_cpus(),
+        let pool = {
+            let mut builder = ThreadPool::builder();
+            if let Some(threads) = opt.threads {
+                builder.pool_size(threads);
+            }
+            builder.create()?
         };
         let pbar = RwLock::new(default_progress_bar((slab_max - slab_min) as u64));
 
@@ -150,14 +153,14 @@ fn dtype_to_color(dtype: DataType) -> image::ColorType {
 fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
     n: &Arc<N5>,
     dataset: &Arc<String>,
-    pool: &CpuPool,
+    pool: &ThreadPool,
     slab_img_buff: &Arc<[RwLock<Vec<u8>>]>,
     file_format: &Arc<String>,
     data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
     min_vox: &[u64; 3],
     max_vox: &[u64; 3],
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let coord_iter = VoxelBoundedSlabCoordIter {
         axis: 2,
         slab_coord: slab_coord as u64,
@@ -165,7 +168,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
         max: (&max_vox[..]).into(),
     };
     let (slab_coord_iter, total_coords) = coord_iter.coord_iter(&*data_attrs);
-    let mut slab_coord_jobs: Vec<CpuFuture<_, std::io::Error>> = Vec::with_capacity(total_coords);
+    let mut slab_coord_jobs: Vec<RemoteHandle<Result<_>>> = Vec::with_capacity(total_coords);
 
     let slab_z = slab_coord as u64 * u64::from(data_attrs.get_block_size()[2]);
     let mut slab_min_i = *min_vox;
@@ -192,7 +195,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
         let dataset = dataset.clone();
         let slab_img_buff = slab_img_buff.clone();
         let data_attrs = data_attrs.clone();
-        slab_coord_jobs.push(pool.spawn_fn(move || {
+        slab_coord_jobs.push(pool.spawn_with_handle(async move {
             slab_block_dispatch(
                 &*n,
                 &*dataset,
@@ -202,12 +205,12 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
                 &slab_min,
                 &slab_max,
             )
-        }));
+        })?);
     }
 
-    futures::future::join_all(slab_coord_jobs).wait()?;
+    futures::executor::block_on(futures::future::try_join_all(slab_coord_jobs))?;
 
-    let mut slab_load_jobs: Vec<CpuFuture<_, std::io::Error>> =
+    let mut slab_load_jobs: Vec<RemoteHandle<Result<_>>> =
         Vec::with_capacity(slab_max[2] - slab_min[2]);
 
     for slab_ind in slab_min[2]..slab_max[2] {
@@ -219,7 +222,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
 
         let width = (max_vox[0] - min_vox[0]) as u32;
         let height = (max_vox[1] - min_vox[1]) as u32;
-        slab_load_jobs.push(pool.spawn_fn(move || {
+        slab_load_jobs.push(pool.spawn_with_handle(async move {
             image::save_buffer(
                 filename,
                 &slab_img_buff[slab_ind as usize].read().unwrap(),
@@ -230,10 +233,10 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
             .unwrap();
 
             Ok(())
-        }));
+        })?);
     }
 
-    futures::future::join_all(slab_load_jobs).wait()?;
+    futures::executor::block_on(futures::future::try_join_all(slab_load_jobs))?;
 
     Ok(())
 }
