@@ -275,13 +275,7 @@ impl CommandType for ImportTiffCommand {
             slab_size,
         )));
 
-        let pool = {
-            let mut builder = ThreadPool::builder();
-            if let Some(threads) = opt.threads {
-                builder.pool_size(threads);
-            }
-            builder.create()?
-        };
+        let pool = crate::pool::create(opt.threads)?;
         let pbar = RwLock::new(default_progress_bar(z_dim as u64));
         let elide_fill_value = imp_opt.elide_fill_value.clone().map(Arc::new);
 

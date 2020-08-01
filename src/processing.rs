@@ -5,7 +5,6 @@ use std::sync::{
 };
 
 use anyhow::Context;
-use futures::executor::ThreadPool;
 use indicatif::ProgressBar;
 use n5::prelude::*;
 use n5::{
@@ -182,14 +181,6 @@ pub(crate) trait BlockReaderMapReduce {
         let coord_iter = coord_iter_factory.coord_iter(&data_attrs);
         let pbar = RwLock::new(crate::default_progress_bar(coord_iter.len() as u64));
 
-        let pool = {
-            let mut builder = ThreadPool::builder();
-            if let Some(threads) = pool_size {
-                builder.pool_size(threads);
-            }
-            builder.create()?
-        };
-
         struct Scoped<N5, BlockArgument> {
             pbar: RwLock<ProgressBar>,
             n: N5,
@@ -205,6 +196,7 @@ pub(crate) trait BlockReaderMapReduce {
             arg,
         });
 
+        let pool = crate::pool::create(pool_size)?;
         let block_results = pool_execute::<anyhow::Error, _, _, _>(
             &pool,
             coord_iter.map(|coord| {

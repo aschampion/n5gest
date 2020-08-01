@@ -10,6 +10,14 @@ use futures::{
     task::SpawnExt,
 };
 
+pub(crate) fn create(threads: Option<usize>) -> std::io::Result<ThreadPool> {
+    let mut builder = ThreadPool::builder();
+    if let Some(threads) = threads {
+        builder.pool_size(threads);
+    }
+    builder.create()
+}
+
 pub(crate) fn pool_execute<E, I, F, V>(pool: &ThreadPool, iter: I) -> anyhow::Result<Vec<V>>
 where
     I: ExactSizeIterator + Iterator<Item = F>,

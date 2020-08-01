@@ -100,13 +100,7 @@ impl CommandType for ExportCommand {
         }
         let slab_img_buff = slab_img_buff.into();
 
-        let pool = {
-            let mut builder = ThreadPool::builder();
-            if let Some(threads) = opt.threads {
-                builder.pool_size(threads);
-            }
-            builder.create()?
-        };
+        let pool = crate::pool::create(opt.threads)?;
         let pbar = RwLock::new(default_progress_bar((slab_max - slab_min) as u64));
 
         for slab_coord in slab_min..slab_max {
