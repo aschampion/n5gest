@@ -1,5 +1,6 @@
 use crate::common::*;
 
+use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::RwLock;
@@ -91,8 +92,18 @@ impl CommandType for ImportCommand {
         let dtype = color_to_dtype(ref_img.color());
 
         let data_attrs = Arc::new(DatasetAttributes::new(
-            smallvec![u64::from(xy_dims.0), u64::from(xy_dims.1), z_dim as u64],
-            imp_opt.block_size.0.iter().map(|&b| b as u32).collect(),
+            smallvec![
+                u64::from(xy_dims.0),
+                u64::from(xy_dims.1),
+                u64::try_from(z_dim)?
+            ],
+            imp_opt
+                .block_size
+                .0
+                .iter()
+                .cloned()
+                .map(u32::try_from)
+                .collect::<std::result::Result<_, _>>()?,
             dtype,
             compression,
         ));
@@ -190,7 +201,7 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
 
     let coord_iter = GridSlabCoordIter {
         axis: 2,
-        slab_coord: slab_coord as u64,
+        slab_coord: u64::try_from(slab_coord)?,
     };
     let slab_coord_iter = coord_iter.coord_iter(&*data_attrs);
 
@@ -226,7 +237,7 @@ fn slab_block_dispatch<N5>(
     slab_img_buff: &[Option<DynamicImage>],
     data_attrs: &DatasetAttributes,
     elide_fill_value: Option<Arc<String>>,
-) -> Result<()>
+) -> anyhow::Result<()>
 where
     N5: N5Writer + Sync + Send + Clone + 'static,
 {
@@ -268,7 +279,8 @@ where
         _ => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "Unsupported data type for import. The image library only supports u8 and u16.",
-        )),
+        )
+        .into()),
     }
 }
 
@@ -281,47 +293,48 @@ fn slab_block_writer<'a, N5, T>(
     >,
     data_attrs: &DatasetAttributes,
     elide_fill_value: Option<T>,
-) -> Result<()>
+) -> anyhow::Result<()>
 where
     N5: N5Writer + Sync + Send + Clone + 'static,
     VecDataBlock<T>: n5::WriteableDataBlock,
     T: DataTypeBounds + image::Primitive,
 {
-    let block_loc = data_attrs
+    let block_size: GridCoord = data_attrs
         .get_block_size()
         .iter()
         .cloned()
         .map(u64::from)
-        .zip(coord.iter())
-        .map(|(s, &i)| i * s)
+        .collect();
+    let block_loc = coord
+        .iter()
+        .zip(block_size.iter())
+        .map(|(&i, s)| i * s)
         .collect::<GridCoord>();
     let crop_block_size = data_attrs
         .get_dimensions()
         .iter()
-        .zip(data_attrs.get_block_size().iter().cloned().map(u64::from))
+        .zip(block_size.iter())
         .zip(coord.iter())
         .map(|((&d, s), &c)| {
             let offset = c * s;
-            (std::cmp::min((c + 1) * s, d) - offset) as u32
+            u32::try_from(std::cmp::min((c + 1) * s, d) - offset)
         })
-        .collect::<BlockCoord>();
+        .collect::<std::result::Result<BlockCoord, _>>()?;
 
-    let mut data = Vec::with_capacity(crop_block_size.iter().product::<u32>() as usize);
+    let mut data = Vec::with_capacity(usize::try_from(crop_block_size.iter().product::<u32>())?);
 
+    let x0 = u32::try_from(block_loc[0])?;
+    let y0 = u32::try_from(block_loc[1])?;
+    let x1 = u32::try_from(crop_block_size[0])?;
+    let y1 = u32::try_from(crop_block_size[1])?;
     for img in slab_img_buff {
-        let slice = img.as_ref().unwrap().view(
-            block_loc[0] as u32,
-            block_loc[1] as u32,
-            crop_block_size[0] as u32,
-            crop_block_size[1] as u32,
-        );
+        let slice = img.as_ref().unwrap().view(x0, y0, x1, y1);
         for (_, _, pixel) in slice.pixels() {
             data.push(pixel.channels()[0]);
         }
     }
 
     if let Some(fill_value) = elide_fill_value {
-        // TODO: bad cast necessary until due to limited DynamicImage type support.
         if data.iter().all(|&v| v == fill_value) {
             return Ok(());
         }
