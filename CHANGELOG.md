@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 
+## [0.3.5] - 2020-10-20
+### Changed
+- Dataset paths can now be absolute (with a leading `/`)
+
+### Fixed
+- `ls` now traverses symlinks.
+
 ## [0.3.4] - 2020-07-20
 ### Changed
 - `cast` is now available on stable Rust without the `nightly` feature.
