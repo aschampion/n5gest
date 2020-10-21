@@ -672,9 +672,9 @@ dependencies = [
 
 [[package]]
 name = "n5"
-version = "0.7.4"
+version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2292010d281246beef93150eeb288bbab32a9321e9275364933a6f5857321a37"
+checksum = "2eb590ff5372cbc2231f95ff69c9c09c24b48b2037e7ea6e4532dc40e37b432e"
 dependencies = [
  "byteorder",
  "bzip2",
@@ -694,7 +694,7 @@ dependencies = [
 
 [[package]]
 name = "n5gest"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "anyhow",
  "byteorder",
