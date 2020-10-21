@@ -60,13 +60,32 @@ impl CommandType for ListCommand {
             "Compression",
         ]);
 
+        let mut last_path: Option<String> = None;
+        let mut format_path = String::new();
         for (path, attr) in datasets.into_iter().sorted_by(|a, b| Ord::cmp(&a.0, &b.0)) {
             let numel = attr.get_num_elements();
             let (numel, prefix) = MetricPrefix::reduce(numel);
             let numblocks = usize::try_from(attr.get_num_blocks()).unwrap();
             let (numblocks, nb_prefix) = MetricPrefix::reduce(numblocks);
+
+            format_path.clear();
+            format_path.push_str(&path);
+            let start_same = last_path
+                .map(|last_path| {
+                    last_path
+                        .split('/')
+                        .zip(path.split('/'))
+                        .take_while(|(last, curr)| last == curr)
+                        .fold(0, |len, (p, _)| len + p.len() + 1)
+                })
+                .unwrap_or(0);
+
+            format_path.insert_str(start_same, "\u{1b}[1m");
+            format_path.push_str("\u{1b}[0m");
+            last_path = Some(path);
+
             table.add_row(row![
-                b -> path,
+                format_path,
                 r -> format!("{:?}", attr.get_dimensions()),
                 r -> format!("{} {}", numel, prefix),
                 r -> format!("{:?}", attr.get_block_size()),

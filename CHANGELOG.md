@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+## Changed
+- `ls` now bolds only the part of the dataset path that has changed from the
+  previous entry, which helps to visualize large, complex hierarchies.
+
 ## [0.3.5] - 2020-10-20
 ### Changed
 - Dataset paths can now be absolute (with a leading `/`)
