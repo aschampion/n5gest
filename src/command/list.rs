@@ -12,6 +12,9 @@ pub struct ListOptions {
     /// N5 root path
     #[structopt(name = "N5")]
     n5_path: String,
+    /// Group root path
+    #[structopt(name = "GROUP", default_value = "")]
+    group_path: String,
 }
 
 pub struct ListCommand;
@@ -22,9 +25,14 @@ impl CommandType for ListCommand {
     fn run(_opt: &Options, ls_opt: &Self::Options) -> anyhow::Result<()> {
         let n = N5Filesystem::open(&ls_opt.n5_path)?;
         let mut group_stack = vec![(
-            "".to_owned(),
-            n.list("")
-                .with_context(|| format!("Failed to list container root: {}", &ls_opt.n5_path))?
+            ls_opt.group_path.clone(),
+            n.list(&ls_opt.group_path)
+                .with_context(|| {
+                    format!(
+                        "Failed to list container: {} group path: {}",
+                        &ls_opt.n5_path, &ls_opt.group_path
+                    )
+                })?
                 .into_iter(),
         )];
 
