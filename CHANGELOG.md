@@ -5,13 +5,16 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 
-## [Unreleased]
-## Added
+## [0.3.7] - 2020-10-26
+### Added
 - `ls` now takes a second optional argument for a group path to restrict listing
   to.
 
+### Fixed
+- Fixed performance regression in upstream n5.
+
 ## [0.3.6] - 2020-10-21
-## Changed
+### Changed
 - `ls` now bolds only the part of the dataset path that has changed from the
   previous entry, which helps to visualize large, complex hierarchies.
 
