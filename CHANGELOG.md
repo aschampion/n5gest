@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+### Added
+- `ls` now takes options for sorting the listing table and sorts by default by
+  a `numeric-suffix` variation of lexicographic that attempts to order the first
+  different path component between two datasets by the order of its numeric
+  suffix if it exists. This properly sorts scale level datasets like `s9` and
+  `s10`.
+
 ## [0.3.7] - 2020-10-26
 ### Added
 - `ls` now takes a second optional argument for a group path to restrict listing
