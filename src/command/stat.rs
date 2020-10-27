@@ -91,7 +91,7 @@ impl CommandType for StatCommand {
                 b -> "total",
                 rb -> prep_size(agg.sum_metadata.size),
                 rb -> format!("{}/{}", agg.occupied, agg.total),
-                "",
+                rb -> format!("{:.2}%", agg.occupied_percentage()),
                 "",
                 "",
             ]);
@@ -114,6 +114,12 @@ struct AggregateStats {
     max_block_coord: GridCoord,
     occupied: u64,
     total: u64,
+}
+
+impl AggregateStats {
+    fn occupied_percentage(&self) -> f64 {
+        (self.occupied as f64) / (self.total as f64) * 100.0
+    }
 }
 
 #[derive(Debug, Default)]
