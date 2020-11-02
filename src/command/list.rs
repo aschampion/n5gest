@@ -15,8 +15,12 @@ pub struct ListOptions {
     /// Group root path
     #[structopt(name = "GROUP", default_value = "")]
     group_path: String,
+    /// Sorting of the listing table
     #[structopt(long = "sort", possible_values = &Sorting::variants(), default_value = "numeric-suffix")]
     sorting: Sorting,
+    /// List datasets nested in other datasets (can be slow)
+    #[structopt(long = "nested")]
+    nested: bool,
 }
 
 // TODO: Clap 3 will allow this mostly to be derived and documented.
@@ -129,11 +133,13 @@ impl CommandType for ListCommand {
                     g_path.clone() + "/" + &next_item
                 };
                 group_stack.push((g_path, g_iter));
-                if let Ok(ds_attr) = n.get_dataset_attributes(&path) {
-                    datasets.insert(path, ds_attr);
-                } else {
+                let attr = n.get_dataset_attributes(&path);
+                if attr.is_err() || ls_opt.nested {
                     let next_g_iter = n.list(&path)?.into_iter();
-                    group_stack.push((path, next_g_iter));
+                    group_stack.push((path.clone(), next_g_iter));
+                }
+                if let Ok(ds_attr) = attr {
+                    datasets.insert(path, ds_attr);
                 }
             }
         }

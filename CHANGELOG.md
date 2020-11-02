@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   different path component between two datasets by the order of its numeric
   suffix if it exists. This properly sorts scale level datasets like `s9` and
   `s10`.
+- `ls` now optionally lists nested datasets with the `nested` option.
 
 ## [0.3.7] - 2020-10-26
 ### Added
