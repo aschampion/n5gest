@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   suffix if it exists. This properly sorts scale level datasets like `s9` and
   `s10`.
 - `ls` now optionally lists nested datasets with the `nested` option.
+- `stat` now lists ratio of block and dataset byte sizes versus max and
+  the percentage of occupied blocks.
 
 ## [0.3.7] - 2020-10-26
 ### Added

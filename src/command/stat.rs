@@ -39,6 +39,7 @@ impl CommandType for StatCommand {
             opt.threads,
             (),
         )?;
+        let data_attrs = n.get_dataset_attributes(&st_opt.dataset)?;
 
         if let Some(agg) = result {
             let prep_date = |date: Option<SystemTime>| {
@@ -51,12 +52,18 @@ impl CommandType for StatCommand {
                     .map(|size| ToString::to_string(&size))
                     .unwrap_or_else(String::new)
             };
+            let size_ratio = |size: Option<u64>, data_attrs: &DatasetAttributes| {
+                size.unwrap_or(0) as f64
+                    / (data_attrs.get_block_num_elements() * data_attrs.get_data_type().size_of())
+                        as f64
+            };
 
             let mut md_table = Table::new();
             md_table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
             md_table.set_titles(row![
                 "",
                 r -> "Size",
+                r -> "Ratio",
                 r -> "GridCoord",
                 "Created",
                 "Accessed",
@@ -65,6 +72,7 @@ impl CommandType for StatCommand {
             md_table.add_row(row![
                 "min",
                 r -> prep_size(agg.min_metadata.size),
+                r -> format!("{:.3}", size_ratio(agg.min_metadata.size, &data_attrs)),
                 r -> format!("{:?}", agg.min_block_coord),
                 prep_date(agg.min_metadata.created),
                 prep_date(agg.min_metadata.accessed),
@@ -73,6 +81,7 @@ impl CommandType for StatCommand {
             md_table.add_row(row![
                 "max",
                 r -> prep_size(agg.max_metadata.size),
+                r -> format!("{:.3}", size_ratio(agg.max_metadata.size, &data_attrs)),
                 r -> format!("{:?}", agg.max_block_coord),
                 prep_date(agg.max_metadata.created),
                 prep_date(agg.max_metadata.accessed),
@@ -82,14 +91,18 @@ impl CommandType for StatCommand {
             md_table.add_row(row![
                 "average",
                 r -> prep_size(average.size),
+                r -> format!("{:.3}", size_ratio(average.size, &data_attrs)),
                 r -> format!("{:?}", avg_coord),
                 prep_date(average.created),
                 prep_date(average.accessed),
                 prep_date(average.modified),
             ]);
+            let ratio_of_max_fully_occupied_size = agg.sum_metadata.size.unwrap_or(0) as f64
+                / (data_attrs.get_num_elements() * data_attrs.get_data_type().size_of()) as f64;
             md_table.add_row(row![
                 b -> "total",
                 rb -> prep_size(agg.sum_metadata.size),
+                r -> format!("{:.3}", ratio_of_max_fully_occupied_size),
                 rb -> format!("{}/{}", agg.occupied, agg.total),
                 rb -> format!("{:.2}%", agg.occupied_percentage()),
                 "",
