@@ -186,7 +186,7 @@ impl std::ops::Add<(GridCoord, &DataBlockMetadata)> for SumMetadata {
         };
 
         let block_coord = if self.block_coord.len() != coord.len() {
-            // Has not yet be initialized.
+            // Has not yet been initialized.
             coord
         } else {
             self.block_coord
