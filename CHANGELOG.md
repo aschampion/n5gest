@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+### Added
+- Commands which take slabbing options now accept ranges of slab coordinates
+  via `--slab-min` and `--slab-max`.
+
 ## [0.3.8] - 2020-11-04
 ### Added
 - `ls` now takes options for sorting the listing table and sorts by default by

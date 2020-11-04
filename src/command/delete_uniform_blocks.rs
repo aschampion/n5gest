@@ -50,7 +50,7 @@ impl CommandType for DeleteUniformBlocksCommand {
         let deleted_coords = DeleteUniformBlocks::run(
             &n,
             &dub_opt.dataset,
-            &*dub_opt.bounds.to_factory(),
+            &*dub_opt.bounds.to_factory()?,
             opt.threads,
             DeleteUniformBlocksArguments {
                 n5_out: n.clone(),

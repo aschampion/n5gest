@@ -43,7 +43,7 @@ impl CommandType for CastCommand {
             data_type,
             &n5_in,
             &cast_opt.input_dataset,
-            &*cast_opt.bounds.to_factory(),
+            &*cast_opt.bounds.to_factory()?,
             opt.threads,
             CastArguments {
                 n5_out,

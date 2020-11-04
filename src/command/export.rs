@@ -161,7 +161,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
 ) -> anyhow::Result<()> {
     let coord_iter = VoxelBoundedSlabCoordIter {
         axis: 2,
-        slab_coord: slab_coord as u64,
+        slab: (Some(slab_coord as u64), Some(slab_coord as u64 + 1)),
         min: (&min_vox[..]).into(),
         max: (&max_vox[..]).into(),
     };

@@ -145,20 +145,48 @@ fn default_progress_bar(size: u64) -> ProgressBar {
 #[derive(StructOpt, Debug)]
 struct GridBoundsOption {
     /// Axis along which to bound the grid coordinate slab.
-    #[structopt(long = "slab-axis", requires("slab-coord"))]
+    #[structopt(long = "slab-axis")]
     axis: Option<usize>,
     /// Grid coordinate of the slab to bound to along the axis given by `slab-axis`.
-    #[structopt(long = "slab-coord", requires("axis"))]
+    /// Equivalent to `--slab-min N --slab-max N + 1`.
+    #[structopt(
+        long = "slab-coord",
+        requires("axis"),
+        conflicts_with("slab_min"),
+        conflicts_with("slab_max")
+    )]
     slab_coord: Option<u64>,
+    /// Min grid coordinate of the slab to bound to along the axis given by `slab-axis`.
+    #[structopt(long = "slab-min", requires("axis"))]
+    slab_min: Option<u64>,
+    /// Max grid coordinate (exclusive) of the slab to bound to along the axis given by `slab-axis`.
+    #[structopt(long = "slab-max", requires("axis"))]
+    slab_max: Option<u64>,
 }
 
 impl GridBoundsOption {
-    fn to_factory(&self) -> Box<dyn iterator::CoordIteratorFactory> {
+    fn to_factory(&self) -> anyhow::Result<Box<dyn iterator::CoordIteratorFactory>> {
         match (self.axis, self.slab_coord) {
-            (Some(axis), Some(slab_coord)) => {
-                Box::new(iterator::GridSlabCoordIter { axis, slab_coord })
+            (Some(axis), Some(slab_coord)) => Ok(Box::new(iterator::GridSlabCoordIter {
+                axis,
+                slab: (Some(slab_coord), Some(slab_coord + 1)),
+            })),
+            (Some(axis), None) => {
+                if let (Some(a), Some(b)) = (self.slab_min, self.slab_max) {
+                    if b <= a {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "Slab max coord must be greater than slab min coord",
+                        )
+                        .into());
+                    }
+                }
+                Ok(Box::new(iterator::GridSlabCoordIter {
+                    axis,
+                    slab: (self.slab_min, self.slab_max),
+                }))
             }
-            _ => Box::new(iterator::DefaultCoordIter {}),
+            _ => Ok(Box::new(iterator::DefaultCoordIter {})),
         }
     }
 }

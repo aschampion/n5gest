@@ -44,7 +44,7 @@ impl CommandType for RecompressCommand {
         let num_bytes = Recompress::run(
             &n5_in,
             &com_opt.input_dataset,
-            &*com_opt.bounds.to_factory(),
+            &*com_opt.bounds.to_factory()?,
             opt.threads,
             RecompressArguments {
                 n5_out,

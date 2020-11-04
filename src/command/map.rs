@@ -35,7 +35,7 @@ impl CommandType for MapCommand {
         let num_bytes = Map::run(
             &n5_in,
             &m_opt.input_dataset,
-            &*m_opt.bounds.to_factory(),
+            &*m_opt.bounds.to_factory()?,
             opt.threads,
             MapArguments {
                 n5_out,

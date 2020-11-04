@@ -199,9 +199,10 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
         }),
     )?;
 
+    let slab_coord = u64::try_from(slab_coord)?;
     let coord_iter = GridSlabCoordIter {
         axis: 2,
-        slab_coord: u64::try_from(slab_coord)?,
+        slab: (Some(slab_coord as u64), Some(slab_coord as u64 + 1)),
     };
     let slab_coord_iter = coord_iter.coord_iter(&*data_attrs);
 

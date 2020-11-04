@@ -23,7 +23,7 @@ impl CommandType for ValidateBlocksCommand {
         let invalid = ValidateBlocks::run(
             &n,
             &vb_opt.dataset,
-            &*vb_opt.bounds.to_factory(),
+            &*vb_opt.bounds.to_factory()?,
             opt.threads,
             (),
         )?;

@@ -27,7 +27,7 @@ impl CoordIteratorFactory for DefaultCoordIter {
 
 pub(crate) struct VoxelBoundedSlabCoordIter {
     pub axis: usize,
-    pub slab_coord: u64,
+    pub slab: (Option<u64>, Option<u64>),
     pub min: GridCoord,
     pub max: GridCoord,
 }
@@ -40,32 +40,35 @@ impl CoordIteratorFactory for VoxelBoundedSlabCoordIter {
         // Necessary for moving into closures.
 
         let axis = self.axis;
-        let slab_coord = self.slab_coord;
-        let mut coord_ceil = self
+        let slab = self.slab;
+        let coord_ceil = self
             .max
             .iter()
             .zip(data_attrs.get_block_size().iter())
             .map(|(&d, &s)| (d + u64::from(s) - 1) / u64::from(s))
-            .collect::<Vec<_>>();
-        coord_ceil.remove(axis as usize);
-        let mut coord_floor = self
+            .collect::<GridCoord>();
+        let coord_floor = self
             .min
             .iter()
             .zip(data_attrs.get_block_size().iter())
             .map(|(&d, &s)| d / u64::from(s))
-            .collect::<Vec<_>>();
-        coord_floor.remove(axis as usize);
+            .collect::<GridCoord>();
 
         let iter = CoordRangeIterator::new(
             coord_ceil
                 .into_iter()
                 .zip(coord_floor.into_iter())
-                .map(|(c, f)| f..c),
-        )
-        .map(move |mut c| {
-            c.insert(axis as usize, slab_coord);
-            c
-        });
+                .map(|(c, f)| f..c)
+                .enumerate()
+                .map(|(i, r)| {
+                    if i == axis {
+                        std::cmp::max(slab.0.unwrap_or(r.start), r.start)
+                            ..std::cmp::min(slab.1.unwrap_or(r.end), r.end)
+                    } else {
+                        r
+                    }
+                }),
+        );
 
         Box::new(iter)
     }
@@ -104,7 +107,7 @@ impl ExactSizeIterator for CoordRangeIterator {
 
 pub(crate) struct GridSlabCoordIter {
     pub axis: usize,
-    pub slab_coord: u64,
+    pub slab: (Option<u64>, Option<u64>),
 }
 
 impl CoordIteratorFactory for GridSlabCoordIter {
@@ -114,7 +117,7 @@ impl CoordIteratorFactory for GridSlabCoordIter {
     ) -> Box<dyn ExactSizeIterator<Item = Vec<u64>>> {
         VoxelBoundedSlabCoordIter {
             axis: self.axis,
-            slab_coord: self.slab_coord,
+            slab: self.slab,
             min: smallvec![0; data_attrs.get_ndim()],
             max: data_attrs.get_dimensions().into(),
         }

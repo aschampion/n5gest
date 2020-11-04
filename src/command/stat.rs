@@ -35,7 +35,7 @@ impl CommandType for StatCommand {
         let result = Stat::run(
             &n,
             &st_opt.dataset,
-            &*st_opt.bounds.to_factory(),
+            &*st_opt.bounds.to_factory()?,
             opt.threads,
             (),
         )?;

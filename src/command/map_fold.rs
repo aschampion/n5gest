@@ -40,7 +40,7 @@ impl CommandType for MapFoldCommand {
         let result = MapFold::run(
             &n,
             &mf_opt.dataset,
-            &*mf_opt.bounds.to_factory(),
+            &*mf_opt.bounds.to_factory()?,
             opt.threads,
             MapFoldArgument {
                 initial_val: mf_opt.initial_val,

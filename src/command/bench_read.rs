@@ -23,7 +23,7 @@ impl CommandType for BenchReadCommand {
         let num_bytes = BenchRead::run(
             &n,
             &br_opt.dataset,
-            &*br_opt.bounds.to_factory(),
+            &*br_opt.bounds.to_factory()?,
             opt.threads,
             (),
         )?;

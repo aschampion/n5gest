@@ -356,7 +356,7 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
 
     let coord_iter = GridSlabCoordIter {
         axis: 2,
-        slab_coord: slab_coord as u64,
+        slab: (Some(slab_coord as u64), Some(slab_coord as u64 + 1)),
     };
     let slab_coord_iter = coord_iter.coord_iter(&*data_attrs);
 
