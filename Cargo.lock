@@ -527,7 +527,7 @@ dependencies = [
  "num-rational",
  "num-traits",
  "png",
- "tiff 0.6.0",
+ "tiff",
 ]
 
 [[package]]
@@ -608,12 +608,6 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
-
-[[package]]
-name = "lzw"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d947cbb889ed21c2a84be6ffbaebf5b4e0f4340638cba0444907e38b56be084"
 
 [[package]]
 name = "matrixmultiply"
@@ -708,7 +702,7 @@ dependencies = [
  "serde_plain",
  "strfmt",
  "structopt",
- "tiff 0.5.0",
+ "tiff",
 ]
 
 [[package]]
@@ -1218,17 +1212,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d40c6d1b69745a6ec6fb1ca717914848da4b44ae29d9b3080cbee91d72a69b14"
 dependencies = [
  "lazy_static",
-]
-
-[[package]]
-name = "tiff"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f3b8a87c4da944c3f27e5943289171ac71a6150a79ff6bacfff06d159dfff2f"
-dependencies = [
- "byteorder",
- "lzw",
- "miniz_oxide 0.3.5",
 ]
 
 [[package]]

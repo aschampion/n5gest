@@ -194,6 +194,8 @@ impl<'a> image::ImageDecoder<'a> for ImageBuffer {
             tiff::decoder::DecodingResult::U16(v) => vec_u16_into_u8(v),
             tiff::decoder::DecodingResult::U32(_) => return Err(err_unknown_color_type(32)),
             tiff::decoder::DecodingResult::U64(_) => return Err(err_unknown_color_type(64)),
+            tiff::decoder::DecodingResult::F32(_) => return Err(err_unknown_color_type(32)),
+            tiff::decoder::DecodingResult::F64(_) => return Err(err_unknown_color_type(64)),
         };
 
         Ok(std::io::Cursor::new(buf))
@@ -210,6 +212,8 @@ impl<'a> image::ImageDecoder<'a> for ImageBuffer {
             }
             tiff::decoder::DecodingResult::U32(_) => return Err(err_unknown_color_type(32)),
             tiff::decoder::DecodingResult::U64(_) => return Err(err_unknown_color_type(64)),
+            tiff::decoder::DecodingResult::F32(_) => return Err(err_unknown_color_type(32)),
+            tiff::decoder::DecodingResult::F64(_) => return Err(err_unknown_color_type(64)),
         }
         Ok(())
     }
