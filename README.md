@@ -39,6 +39,8 @@ SUBCOMMANDS:
     map-fold           Run simple math expressions as folds over blocks. For example, to find the
                        maximum value in a positive dataset: `map-fold example.n5 dataset 0 "max(acc, x)"`
     recompress         Recompress an existing dataset into a new dataset with a given compression.
+    slice-img          Export a 2D subslice of an ND dataset to an image file. For exporting sequences of
+                       images see `export`
     stat               Retrieve metadata about the number of blocks that exists and their timestamps.
     validate-blocks    Report malformed blocks.
 ```
