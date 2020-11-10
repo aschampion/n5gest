@@ -13,6 +13,7 @@ mod list;
 mod map;
 mod map_fold;
 mod recompress;
+mod slice_img;
 mod stat;
 mod validate_blocks;
 
@@ -65,6 +66,10 @@ pub(super) enum Command {
     /// compression.
     #[structopt(name = "recompress")]
     Recompress(recompress::RecompressOptions),
+    /// Export a 2D subslice of an ND dataset to an image file.
+    /// For exporting sequences of images see `export`.
+    #[structopt(name = "slice-img")]
+    SliceImg(slice_img::SliceImgOptions),
     /// Report malformed blocks.
     #[structopt(name = "validate-blocks")]
     ValidateBlocks(validate_blocks::ValidateBlocksOptions),
@@ -103,6 +108,8 @@ pub(super) fn dispatch(opt: &Options) -> Result<()> {
             map_fold::MapFoldCommand::run(opt, mf_opt)?,
         Command::Recompress(ref com_opt) =>
             recompress::RecompressCommand::run(opt, com_opt)?,
+        Command::SliceImg(ref com_opt) =>
+            slice_img::SliceImgCommand::run(opt, com_opt)?,
         Command::ValidateBlocks(ref vb_opt) =>
             validate_blocks::ValidateBlocksCommand::run(opt, vb_opt)?,
     };

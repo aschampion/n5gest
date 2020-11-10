@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Added
+- New command: `slice-img` exports an image from a 2D slice. Unlike `export`
+  this supports N-dimensional volumes and arbitrary slicing dimensions.
 - Commands which take slabbing options now accept ranges of slab coordinates
   via `--slab-min` and `--slab-max`.
 
