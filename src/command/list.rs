@@ -10,7 +10,7 @@ use crate::MetricPrefix;
 #[derive(StructOpt, Debug)]
 pub struct ListOptions {
     /// N5 root path
-    #[structopt(name = "N5")]
+    #[structopt(name = "N5", default_value = ".")]
     n5_path: String,
     /// Group root path
     #[structopt(name = "GROUP", default_value = "")]
