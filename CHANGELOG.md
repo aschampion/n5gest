@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+<!-- next-header -->
+## [Unreleased]
+### Added
+- `ls` defaults to current working directory if no container path provided.
 
 ## [0.3.9] - 2020-11-10
 ### Added
@@ -93,3 +97,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `ls`: include grid extent and max block count.
 - `stat`: report average statistics in addition to min and max.
 - `stat`: also report block coordinate statistics.
+
+<!-- next-url -->
+[unreleased]: https://github.com/aschampion/n5gest/compare/v0.3.9...HEAD
+[0.3.9]: https://github.com/aschampion/n5gest/compare/0.3.8...0.3.8
+[0.3.8]: https://github.com/aschampion/n5gest/compare/0.3.7...0.3.8
+[0.3.7]: https://github.com/aschampion/n5gest/compare/0.3.6...0.3.7
+[0.3.6]: https://github.com/aschampion/n5gest/compare/0.3.5...0.3.6
+[0.3.5]: https://github.com/aschampion/n5gest/compare/0.3.4...0.3.5
+[0.3.4]: https://github.com/aschampion/n5gest/compare/0.3.3...0.3.4
+[0.3.3]: https://github.com/aschampion/n5gest/compare/0.3.2...0.3.3
+[0.3.2]: https://github.com/aschampion/n5gest/compare/0.3.1...0.3.2
+[0.3.1]: https://github.com/aschampion/n5gest/compare/0.3.0...0.3.1

@@ -45,6 +45,15 @@ SUBCOMMANDS:
     validate-blocks    Report malformed blocks.
 ```
 
+## Development
+
+Version bumping (including changelog release section versioning) is handled by [cargo-release](https://github.com/crate-ci/cargo-release), e.g.:
+
+```prompt
+cargo release --dev-version minor
+```
+
+
 ## License
 
 Licensed under either of
