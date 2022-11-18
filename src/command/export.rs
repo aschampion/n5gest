@@ -215,7 +215,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
             let data_attrs = data_attrs.clone();
             let slab_img_buff = slab_img_buff.clone();
             let mut params = std::collections::HashMap::new();
-            params.insert("z".into(), slab_z as usize + slab_ind);
+            params.insert("z".to_owned(), slab_z as usize + slab_ind);
             let filename = file_format.format(&params).unwrap();
 
             let width = (max_vox[0] - min_vox[0]) as u32;
