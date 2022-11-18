@@ -1,4 +1,7 @@
-use crate::common::*;
+use crate::{
+    common::*,
+    ContainedDataset,
+};
 
 use std::convert::TryFrom;
 use std::fs::File;
@@ -240,9 +243,9 @@ impl CommandType for ImportTiffCommand {
     type Options = ImportTiffOptions;
 
     fn run(opt: &Options, imp_opt: &Self::Options) -> anyhow::Result<()> {
-        let n = Arc::new(N5Filesystem::open_or_create(&imp_opt.n5_path)?);
+        let container = N5Filesystem::open_or_create(&imp_opt.n5_path)?;
 
-        if n.exists(&imp_opt.dataset)? {
+        if container.exists(&imp_opt.dataset)? {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
                 format!("Dataset {} already exists", imp_opt.dataset),
@@ -264,15 +267,22 @@ impl CommandType for ImportTiffCommand {
         let dtype = color_to_dtype(ref_img.color);
         let z_dim = iter.count_images()?;
 
-        let data_attrs = Arc::new(DatasetAttributes::new(
+        let attrs = DatasetAttributes::new(
             smallvec![u64::from(xy_dims.0), u64::from(xy_dims.1), z_dim as u64],
             imp_opt.block_size.0.iter().map(|&b| b as u32).collect(),
             dtype,
             compression,
-        ));
+        );
 
-        let dataset = Arc::new(imp_opt.dataset.clone());
-        n.create_dataset(&dataset, &data_attrs)?;
+        let dataset = Arc::new(ContainedDataset {
+            name: imp_opt.dataset.clone(),
+            attrs,
+            container,
+        });
+
+        dataset
+            .container
+            .create_dataset(&dataset.name, &dataset.attrs)?;
         let slab_size = imp_opt.block_size.0[2];
 
         let slab_img_buff = Arc::new(RwLock::new(Vec::<Option<DynamicImage>>::with_capacity(
@@ -286,13 +296,11 @@ impl CommandType for ImportTiffCommand {
         for (slab_coord, start) in (0..z_dim).step_by(slab_size).enumerate() {
             let end = std::cmp::min(z_dim, start + slab_size);
             import_slab(
-                &n,
                 &dataset,
                 &pool,
                 &iter,
                 start..end,
                 &slab_img_buff,
-                &data_attrs,
                 slab_coord,
                 elide_fill_value.clone(),
             )?;
@@ -301,7 +309,7 @@ impl CommandType for ImportTiffCommand {
 
         pbar.write().unwrap().finish();
 
-        let num_bytes = data_attrs.get_num_elements() * data_attrs.get_data_type().size_of();
+        let num_bytes = dataset.attrs.get_num_elements() * dataset.attrs.get_data_type().size_of();
         let elapsed = started.elapsed();
         println!(
             "Wrote {} (uncompressed) in {}",
@@ -317,13 +325,11 @@ impl CommandType for ImportTiffCommand {
 }
 
 fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
-    n: &Arc<N5>,
-    dataset: &Arc<String>,
+    dataset: &Arc<ContainedDataset<N5>>,
     pool: &ThreadPool,
     tiff: &TiffMetadataIterator,
     slab: Range<usize>,
     slab_img_buff: &Arc<RwLock<Vec<Option<DynamicImage>>>>,
-    data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
     elide_fill_value: Option<Arc<String>>,
 ) -> anyhow::Result<()> {
@@ -337,20 +343,15 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
         pool,
         slab.enumerate().map(|(i, coord)| {
             let mut tiff = tiff.clone();
-            let data_attrs = data_attrs.clone();
+            let dset_dims = dataset.attrs.get_dimensions().to_owned();
+            let dset_dtype = dataset.attrs.get_data_type().to_owned();
             let slab_img_buff = slab_img_buff.clone();
 
             async move {
                 let image = tiff.read_image_index(coord)?;
-                assert_eq!(color_to_dtype(image.color()), *data_attrs.get_data_type());
-                assert_eq!(
-                    u64::from(image.dimensions().0),
-                    data_attrs.get_dimensions()[0]
-                );
-                assert_eq!(
-                    u64::from(image.dimensions().1),
-                    data_attrs.get_dimensions()[1]
-                );
+                assert_eq!(color_to_dtype(image.color()), dset_dtype);
+                assert_eq!(u64::from(image.dimensions().0), dset_dims[0]);
+                assert_eq!(u64::from(image.dimensions().1), dset_dims[1]);
                 slab_img_buff.write().unwrap()[i] = Some(image);
 
                 Ok(())
@@ -362,27 +363,18 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
         axis: 2,
         slab: (Some(slab_coord as u64), Some(slab_coord as u64 + 1)),
     };
-    let slab_coord_iter = coord_iter.coord_iter(&*data_attrs);
+    let slab_coord_iter = coord_iter.coord_iter(&dataset.attrs);
 
     pool_execute(
         pool,
         slab_coord_iter.map(|coord| {
-            let n = n.clone();
             let dataset = dataset.clone();
             let slab_img_buff = slab_img_buff.clone();
-            let data_attrs = data_attrs.clone();
             let elide_fill_value = elide_fill_value.clone();
 
             async move {
                 let slab_read = slab_img_buff.read().unwrap();
-                slab_block_dispatch(
-                    &*n,
-                    &*dataset,
-                    coord.into(),
-                    &slab_read,
-                    &*data_attrs,
-                    elide_fill_value,
-                )
+                slab_block_dispatch(&dataset, coord.into(), &slab_read, elide_fill_value)
             }
         }),
     )?;

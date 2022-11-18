@@ -141,9 +141,6 @@ where
         results: Vec<Self::BlockResult>,
         _arg: &Self::BlockArgument,
     ) -> Self::ReduceResult {
-        results
-            .into_iter()
-            .filter_map(std::convert::identity)
-            .collect()
+        results.into_iter().flatten().collect()
     }
 }

@@ -1,4 +1,7 @@
-use crate::common::*;
+use crate::{
+    common::*,
+    ContainedDataset,
+};
 
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -67,9 +70,9 @@ impl CommandType for ImportCommand {
     type Options = ImportOptions;
 
     fn run(opt: &Options, imp_opt: &Self::Options) -> anyhow::Result<()> {
-        let n = Arc::new(N5Filesystem::open_or_create(&imp_opt.n5_path)?);
+        let container = N5Filesystem::open_or_create(&imp_opt.n5_path)?;
 
-        if n.exists(&imp_opt.dataset)? {
+        if container.exists(&imp_opt.dataset)? {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
                 format!("Dataset {} already exists", imp_opt.dataset),
@@ -91,7 +94,7 @@ impl CommandType for ImportCommand {
         let xy_dims = ref_img.dimensions();
         let dtype = color_to_dtype(ref_img.color());
 
-        let data_attrs = Arc::new(DatasetAttributes::new(
+        let attrs = DatasetAttributes::new(
             smallvec![
                 u64::from(xy_dims.0),
                 u64::from(xy_dims.1),
@@ -106,10 +109,17 @@ impl CommandType for ImportCommand {
                 .collect::<std::result::Result<_, _>>()?,
             dtype,
             compression,
-        ));
+        );
 
-        let dataset = Arc::new(imp_opt.dataset.clone());
-        n.create_dataset(&dataset, &data_attrs)?;
+        let dataset = Arc::new(ContainedDataset {
+            name: imp_opt.dataset.clone(),
+            attrs,
+            container,
+        });
+
+        dataset
+            .container
+            .create_dataset(&dataset.name, &dataset.attrs)?;
         let slab_size = imp_opt.block_size.0[2];
 
         let slab_img_buff = Arc::new(RwLock::new(Vec::<Option<DynamicImage>>::with_capacity(
@@ -122,12 +132,10 @@ impl CommandType for ImportCommand {
 
         for (slab_coord, slab_files) in files.chunks(slab_size).enumerate() {
             import_slab(
-                &n,
                 &dataset,
                 &pool,
                 &slab_img_buff,
-                &slab_files,
-                &data_attrs,
+                slab_files,
                 slab_coord,
                 elide_fill_value.clone(),
             )?;
@@ -136,7 +144,7 @@ impl CommandType for ImportCommand {
 
         pbar.write().unwrap().finish();
 
-        let num_bytes = data_attrs.get_num_elements() * data_attrs.get_data_type().size_of();
+        let num_bytes = dataset.attrs.get_num_elements() * dataset.attrs.get_data_type().size_of();
         let elapsed = started.elapsed();
         println!(
             "Wrote {} (uncompressed) in {}",
@@ -160,12 +168,10 @@ fn color_to_dtype(color: image::ColorType) -> DataType {
 }
 
 fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
-    n: &Arc<N5>,
-    dataset: &Arc<String>,
+    dataset: &Arc<ContainedDataset<N5>>,
     pool: &ThreadPool,
     slab_img_buff: &Arc<RwLock<Vec<Option<DynamicImage>>>>,
     slab_files: &[PathBuf],
-    data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
     elide_fill_value: Option<Arc<String>>,
 ) -> anyhow::Result<()> {
@@ -179,19 +185,14 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
         pool,
         slab_files.iter().enumerate().map(|(i, file)| {
             let owned_file = file.clone();
-            let data_attrs = data_attrs.clone();
+            let dset_dims = dataset.attrs.get_dimensions().to_owned();
+            let dset_dtype = dataset.attrs.get_data_type().to_owned();
             let slab_img_buff = slab_img_buff.clone();
             async move {
                 let image = image::open(&owned_file)?;
-                assert_eq!(color_to_dtype(image.color()), *data_attrs.get_data_type());
-                assert_eq!(
-                    u64::from(image.dimensions().0),
-                    data_attrs.get_dimensions()[0]
-                );
-                assert_eq!(
-                    u64::from(image.dimensions().1),
-                    data_attrs.get_dimensions()[1]
-                );
+                assert_eq!(color_to_dtype(image.color()), dset_dtype);
+                assert_eq!(u64::from(image.dimensions().0), dset_dims[0]);
+                assert_eq!(u64::from(image.dimensions().1), dset_dims[1]);
                 slab_img_buff.write().unwrap()[i] = Some(image);
 
                 Ok(())
@@ -202,28 +203,19 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
     let slab_coord = u64::try_from(slab_coord)?;
     let coord_iter = GridSlabCoordIter {
         axis: 2,
-        slab: (Some(slab_coord as u64), Some(slab_coord as u64 + 1)),
+        slab: (Some(slab_coord), Some(slab_coord + 1)),
     };
-    let slab_coord_iter = coord_iter.coord_iter(&*data_attrs);
+    let slab_coord_iter = coord_iter.coord_iter(&dataset.attrs);
 
     pool_execute(
         pool,
         slab_coord_iter.map(|coord| {
-            let n = n.clone();
             let dataset = dataset.clone();
             let slab_img_buff = slab_img_buff.clone();
-            let data_attrs = data_attrs.clone();
             let elide_fill_value = elide_fill_value.clone();
             async move {
                 let slab_read = slab_img_buff.read().unwrap();
-                slab_block_dispatch(
-                    &*n,
-                    &*dataset,
-                    coord.into(),
-                    &slab_read,
-                    &*data_attrs,
-                    elide_fill_value,
-                )
+                slab_block_dispatch(&dataset, coord.into(), &slab_read, elide_fill_value)
             }
         }),
     )?;
@@ -232,17 +224,15 @@ fn import_slab<N5: N5Writer + Sync + Send + Clone + 'static>(
 }
 
 fn slab_block_dispatch<N5>(
-    n: &N5,
-    dataset: &str,
+    dataset: &ContainedDataset<N5>,
     coord: GridCoord,
     slab_img_buff: &[Option<DynamicImage>],
-    data_attrs: &DatasetAttributes,
     elide_fill_value: Option<Arc<String>>,
 ) -> anyhow::Result<()>
 where
     N5: N5Writer + Sync + Send + Clone + 'static,
 {
-    match *data_attrs.get_data_type() {
+    match *dataset.attrs.get_data_type() {
         DataType::UINT8 => {
             let elide_fill_value: Option<u8> = elide_fill_value
                 .as_ref()
@@ -250,13 +240,11 @@ where
                 .transpose()
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
             slab_block_writer(
-                n,
                 dataset,
                 coord,
                 slab_img_buff
                     .iter()
                     .map(|di| di.as_ref().map(|di| di.as_luma8().unwrap())),
-                data_attrs,
                 elide_fill_value,
             )
         }
@@ -267,13 +255,11 @@ where
                 .transpose()
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
             slab_block_writer(
-                n,
                 dataset,
                 coord,
                 slab_img_buff
                     .iter()
                     .map(|di| di.as_ref().map(|di| di.as_luma16().unwrap())),
-                data_attrs,
                 elide_fill_value,
             )
         }
@@ -286,13 +272,11 @@ where
 }
 
 fn slab_block_writer<'a, N5, T>(
-    n: &N5,
-    dataset: &str,
+    dataset: &ContainedDataset<N5>,
     coord: GridCoord,
     slab_img_buff: impl Iterator<
         Item = Option<&'a (impl GenericImageView<Pixel = impl image::Pixel<Subpixel = T>> + 'a)>,
     >,
-    data_attrs: &DatasetAttributes,
     elide_fill_value: Option<T>,
 ) -> anyhow::Result<()>
 where
@@ -300,7 +284,8 @@ where
     VecDataBlock<T>: n5::WriteableDataBlock,
     T: DataTypeBounds + image::Primitive,
 {
-    let block_size: GridCoord = data_attrs
+    let block_size: GridCoord = dataset
+        .attrs
         .get_block_size()
         .iter()
         .cloned()
@@ -311,7 +296,8 @@ where
         .zip(block_size.iter())
         .map(|(&i, s)| i * s)
         .collect::<GridCoord>();
-    let crop_block_size = data_attrs
+    let crop_block_size = dataset
+        .attrs
         .get_dimensions()
         .iter()
         .zip(block_size.iter())
@@ -326,8 +312,8 @@ where
 
     let x0 = u32::try_from(block_loc[0])?;
     let y0 = u32::try_from(block_loc[1])?;
-    let x1 = u32::try_from(crop_block_size[0])?;
-    let y1 = u32::try_from(crop_block_size[1])?;
+    let x1 = crop_block_size[0];
+    let y1 = crop_block_size[1];
     for img in slab_img_buff {
         let slice = img.as_ref().unwrap().view(x0, y0, x1, y1);
         for (_, _, pixel) in slice.pixels() {
@@ -342,7 +328,9 @@ where
     }
 
     let block = VecDataBlock::new(crop_block_size, coord, data);
-    n.write_block(dataset, data_attrs, &block)?;
+    dataset
+        .container
+        .write_block(&dataset.name, &dataset.attrs, &block)?;
 
     Ok(())
 }

@@ -242,7 +242,7 @@ impl BlockReaderMapReduce for Stat {
         _arg: &Self::BlockArgument,
     ) -> Self::ReduceResult {
         let total = results.len().try_into().unwrap();
-        let mut results = results.into_iter().filter_map(|b| b);
+        let mut results = results.into_iter().flatten();
 
         if let Some((coord, first)) = results.next() {
             let stats = AggregateStats {

@@ -107,10 +107,6 @@ impl BlockReaderMapReduce for MapFold {
     ) -> Self::ReduceResult {
         let fold_fn = arg.block_fold_expr.clone().bind2("acc", "x").unwrap();
 
-        results
-            .into_iter()
-            .filter(Option::is_some)
-            .map(Option::unwrap)
-            .fold(arg.initial_val, fold_fn)
+        results.into_iter().flatten().fold(arg.initial_val, fold_fn)
     }
 }

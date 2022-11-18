@@ -52,18 +52,10 @@ impl CommandType for ValidateBlocksCommand {
     }
 }
 
+#[derive(Default)]
 struct InvalidBlocks {
     errored: Vec<GridCoord>,
     wrongly_sized: Vec<GridCoord>,
-}
-
-impl Default for InvalidBlocks {
-    fn default() -> Self {
-        Self {
-            errored: vec![],
-            wrongly_sized: vec![],
-        }
-    }
 }
 
 enum ValidationResult {

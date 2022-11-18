@@ -190,3 +190,10 @@ impl GridBoundsOption {
         }
     }
 }
+
+/// Container with dataset and attributes, for argument brevity.
+struct ContainedDataset<N5> {
+    container: N5,
+    name: String,
+    attrs: n5::DatasetAttributes,
+}

@@ -142,7 +142,7 @@ where
                 );
                 arg.n5_out.write_block(
                     &arg.dataset_out,
-                    &arg.data_attrs_out.as_ref().unwrap(),
+                    arg.data_attrs_out.as_ref().unwrap(),
                     &cast_block,
                 )?;
                 block.get_num_elements() as usize

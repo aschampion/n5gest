@@ -1,4 +1,7 @@
-use crate::common::*;
+use crate::{
+    common::*,
+    ContainedDataset,
+};
 
 use std::cmp::min;
 use std::sync::RwLock;
@@ -55,18 +58,22 @@ impl CommandType for ExportCommand {
     type Options = ExportOptions;
 
     fn run(opt: &Options, exp_opt: &Self::Options) -> anyhow::Result<()> {
-        let n = Arc::new(N5Filesystem::open(&exp_opt.n5_path)?);
         let started = Instant::now();
+        let container = N5Filesystem::open(&exp_opt.n5_path)?;
 
-        let data_attrs = Arc::new(n.get_dataset_attributes(&exp_opt.dataset).with_context(
-            || {
-                format!(
-                    "Failed to read dataset attributes ({}): {}",
-                    &exp_opt.n5_path, &exp_opt.dataset
-                )
-            },
-        )?);
-        let slab_size = u64::from(data_attrs.get_block_size()[2]);
+        let dataset = Arc::new(ContainedDataset {
+            name: exp_opt.dataset.clone(),
+            attrs: container
+                .get_dataset_attributes(&exp_opt.dataset)
+                .with_context(|| {
+                    format!(
+                        "Failed to read dataset attributes ({}): {}",
+                        &exp_opt.n5_path, &exp_opt.dataset
+                    )
+                })?,
+            container,
+        });
+        let slab_size = u64::from(dataset.attrs.get_block_size()[2]);
 
         let min = [
             exp_opt.x_min.unwrap_or(0),
@@ -76,22 +83,21 @@ impl CommandType for ExportCommand {
         let max = [
             exp_opt
                 .x_max
-                .unwrap_or_else(|| data_attrs.get_dimensions()[0]),
+                .unwrap_or_else(|| dataset.attrs.get_dimensions()[0]),
             exp_opt
                 .y_max
-                .unwrap_or_else(|| data_attrs.get_dimensions()[1]),
+                .unwrap_or_else(|| dataset.attrs.get_dimensions()[1]),
             exp_opt
                 .z_max
-                .unwrap_or_else(|| data_attrs.get_dimensions()[2]),
+                .unwrap_or_else(|| dataset.attrs.get_dimensions()[2]),
         ];
 
         let slab_min = min[2] / slab_size; // Floor
         let slab_max = max[2] / slab_size + u64::from(max[2] % slab_size > 0); // Ceiling
 
         let num_section_el = ((max[0] - min[0]) * (max[1] - min[1])) as usize;
-        let dtype_size = data_attrs.get_data_type().size_of();
+        let dtype_size = dataset.attrs.get_data_type().size_of();
 
-        let dataset = Arc::new(exp_opt.dataset.clone());
         let file_format = Arc::new(exp_opt.file_format.clone());
 
         let mut slab_img_buff = Vec::with_capacity(slab_size as usize);
@@ -101,16 +107,14 @@ impl CommandType for ExportCommand {
         let slab_img_buff = slab_img_buff.into();
 
         let pool = crate::pool::create(opt.threads)?;
-        let pbar = RwLock::new(default_progress_bar((slab_max - slab_min) as u64));
+        let pbar = RwLock::new(default_progress_bar(slab_max - slab_min));
 
         for slab_coord in slab_min..slab_max {
             export_slab(
-                &n,
                 &dataset,
                 &pool,
                 &slab_img_buff,
                 &file_format,
-                &data_attrs,
                 slab_coord as usize,
                 &min,
                 &max,
@@ -125,7 +129,7 @@ impl CommandType for ExportCommand {
             .zip(min.iter())
             .map(|(&ma, &mi)| ma - mi)
             .product::<u64>() as usize
-            * data_attrs.get_data_type().size_of();
+            * dataset.attrs.get_data_type().size_of();
         let elapsed = started.elapsed();
         println!(
             "Wrote {} (uncompressed) in {}",
@@ -149,12 +153,10 @@ fn dtype_to_color(dtype: DataType) -> image::ColorType {
 }
 
 fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
-    n: &Arc<N5>,
-    dataset: &Arc<String>,
+    dataset: &Arc<ContainedDataset<N5>>,
     pool: &ThreadPool,
     slab_img_buff: &Arc<[RwLock<Vec<u8>>]>,
     file_format: &Arc<String>,
-    data_attrs: &Arc<DatasetAttributes>,
     slab_coord: usize,
     min_vox: &[u64; 3],
     max_vox: &[u64; 3],
@@ -165,15 +167,15 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
         min: (&min_vox[..]).into(),
         max: (&max_vox[..]).into(),
     };
-    let slab_coord_iter = coord_iter.coord_iter(&*data_attrs);
+    let slab_coord_iter = coord_iter.coord_iter(&dataset.attrs);
 
-    let slab_z = slab_coord as u64 * u64::from(data_attrs.get_block_size()[2]);
+    let slab_z = slab_coord as u64 * u64::from(dataset.attrs.get_block_size()[2]);
     let mut slab_min_i = *min_vox;
     let mut slab_max_i = *max_vox;
-    slab_min_i[2] = min_vox[2].checked_sub(slab_z).unwrap_or(0);
+    slab_min_i[2] = min_vox[2].saturating_sub(slab_z);
     slab_max_i[2] = min(
         max_vox[2] - slab_z,
-        u64::from(data_attrs.get_block_size()[2]),
+        u64::from(dataset.attrs.get_block_size()[2]),
     );
 
     let slab_min = [
@@ -190,21 +192,11 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
     pool_execute(
         pool,
         slab_coord_iter.map(|coord| {
-            let n = n.clone();
             let dataset = dataset.clone();
             let slab_img_buff = slab_img_buff.clone();
-            let data_attrs = data_attrs.clone();
 
             async move {
-                slab_block_dispatch(
-                    &*n,
-                    &*dataset,
-                    coord.into(),
-                    &slab_img_buff,
-                    &*data_attrs,
-                    &slab_min,
-                    &slab_max,
-                )
+                slab_block_dispatch(&dataset, coord.into(), &slab_img_buff, &slab_min, &slab_max)
             }
         }),
     )?;
@@ -212,7 +204,7 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
     pool_execute::<std::io::Error, _, _, _>(
         pool,
         (slab_min[2]..slab_max[2]).map(|slab_ind| {
-            let data_attrs = data_attrs.clone();
+            let color_type = dtype_to_color(*dataset.attrs.get_data_type());
             let slab_img_buff = slab_img_buff.clone();
             let mut params = std::collections::HashMap::new();
             params.insert("z".to_owned(), slab_z as usize + slab_ind);
@@ -223,10 +215,10 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
             async move {
                 image::save_buffer(
                     filename,
-                    &slab_img_buff[slab_ind as usize].read().unwrap(),
+                    &slab_img_buff[slab_ind].read().unwrap(),
                     width,
                     height,
-                    dtype_to_color(*data_attrs.get_data_type()),
+                    color_type,
                 )
                 .unwrap();
 
@@ -239,11 +231,9 @@ fn export_slab<N5: N5Reader + Sync + Send + Clone + 'static>(
 }
 
 fn slab_block_dispatch<N5>(
-    n: &N5,
-    dataset: &str,
+    dataset: &ContainedDataset<N5>,
     coord: GridCoord,
     slab_img_buff: &[RwLock<Vec<u8>>],
-    data_attrs: &DatasetAttributes,
     slab_min: &[usize; 3],
     slab_max: &[usize; 3],
 ) -> Result<()>
@@ -251,14 +241,14 @@ where
     N5: N5Reader + Sync + Send + Clone + 'static,
 {
     data_type_match! {
-        *data_attrs.get_data_type(),
+        *dataset.attrs.get_data_type(),
         {
-            let block = n.read_block::<RsType>(dataset, data_attrs, coord.clone());
+            let block = dataset.container.read_block::<RsType>(&dataset.name, &dataset.attrs, coord.clone());
             slab_block_reader::<RsType>(
                 &coord,
                 block,
                 slab_img_buff,
-                data_attrs,
+                &dataset.attrs,
                 slab_min,
                 slab_max)
         }
@@ -343,7 +333,12 @@ where
     let img_block_row_bytes = (block_max[0] - block_min[0]) * dtype_size;
     let block_row_bytes = (crop_block_size[0] as usize) * dtype_size;
 
-    for z in block_min[2]..block_max[2] {
+    for (z, slab_img) in slab_img_buff
+        .iter()
+        .enumerate()
+        .take(block_max[2])
+        .skip(block_min[2])
+    {
         let mut data_offset = dtype_size
             * (z * ((crop_block_size[0] * crop_block_size[1]) as usize)
                 + block_min[1] * crop_block_size[0] as usize
@@ -352,7 +347,7 @@ where
             * (img_row_vox * (block_loc[1] as usize + block_min[1]).saturating_sub(slab_min[1])
                 + (block_loc[0] as usize + block_min[0]).saturating_sub(slab_min[0]));
 
-        let mut img_write = slab_img_buff[z].write().unwrap();
+        let mut img_write = slab_img.write().unwrap();
         for _y in block_min[1]..block_max[1] {
             img_write[offset..(offset + img_block_row_bytes)]
                 .copy_from_slice(&byte_data[data_offset..(data_offset + img_block_row_bytes)]);
