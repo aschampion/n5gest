@@ -43,3 +43,7 @@ features = ["gif", "jpeg", "png", "pnm", "tga", "tiff", "webp", "bmp", "dxt"]
 
 [profile.release]
 lto = true
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/n5gest-{ target }.tgz"
+bin-dir = "{ bin }-{ target }{ format }"
