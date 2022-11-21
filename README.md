@@ -1,4 +1,4 @@
-# n5gest
+# n5gest [![Build Status](https://github.com/aschampion/n5gest/actions/workflows/ci.yml/badge.svg)](https://github.com/aschampion/n5gest/actions/workflows/ci.yml/)
 
 CLI utilities for working with [N5](https://github.com/saalfeldlab/n5) files.
 
@@ -45,6 +45,11 @@ SUBCOMMANDS:
     validate-blocks    Report malformed blocks.
 ```
 
+Installation options:
+- Compile and install using cargo: `cargo install n5gest`
+- Download a precompiled binary from [the latest GitHub releases](https://github.com/aschampion/n5gest/releases/latest)
+- Install a precompiled binary using [cargo-binstall](https://github.com/ryankurte/cargo-binstall): `cargo binstall n5gest`
+
 ## Development
 
 Version bumping (including changelog release section versioning) is handled by [cargo-release](https://github.com/crate-ci/cargo-release), e.g.:
@@ -52,7 +57,6 @@ Version bumping (including changelog release section versioning) is handled by [
 ```prompt
 cargo release --dev-version minor
 ```
-
 
 ## License
 

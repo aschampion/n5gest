@@ -99,7 +99,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `stat`: also report block coordinate statistics.
 
 <!-- next-url -->
-[unreleased]: https://github.com/aschampion/n5gest/compare/v0.3.9...HEAD
+[Unreleased]: https://github.com/aschampion/n5gest/compare/v0.3.9...HEAD
 [0.3.9]: https://github.com/aschampion/n5gest/compare/0.3.8...0.3.9
 [0.3.8]: https://github.com/aschampion/n5gest/compare/0.3.7...0.3.8
 [0.3.7]: https://github.com/aschampion/n5gest/compare/0.3.6...0.3.7
