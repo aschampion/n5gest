@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- next-header -->
+
+## [Unreleased]
+
+
 ## [0.4.0] - 2022-11-21
 ### Changed
 - `ls` defaults to current working directory if no container path provided.
@@ -99,6 +103,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `stat`: also report block coordinate statistics.
 
 <!-- next-url -->
+[Unreleased]: https://github.com/aschampion/n5gest/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/aschampion/n5gest/compare/v0.3.9...v0.4.0
 [0.3.9]: https://github.com/aschampion/n5gest/compare/0.3.8...0.3.9
 [0.3.8]: https://github.com/aschampion/n5gest/compare/0.3.7...0.3.8
