@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 <!-- next-header -->
 ## [Unreleased]
-### Added
+### Changed
 - `ls` defaults to current working directory if no container path provided.
 
 ## [0.3.9] - 2020-11-10
@@ -100,7 +100,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 <!-- next-url -->
 [unreleased]: https://github.com/aschampion/n5gest/compare/v0.3.9...HEAD
-[0.3.9]: https://github.com/aschampion/n5gest/compare/0.3.8...0.3.8
+[0.3.9]: https://github.com/aschampion/n5gest/compare/0.3.8...0.3.9
 [0.3.8]: https://github.com/aschampion/n5gest/compare/0.3.7...0.3.8
 [0.3.7]: https://github.com/aschampion/n5gest/compare/0.3.6...0.3.7
 [0.3.6]: https://github.com/aschampion/n5gest/compare/0.3.5...0.3.6
